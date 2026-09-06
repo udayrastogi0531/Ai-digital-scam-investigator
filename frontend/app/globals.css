@@ -6,36 +6,171 @@
   color-scheme: dark;
 }
 
-body {
-  @apply bg-base-950 text-slate-200 antialiased;
+html {
+  scroll-behavior: smooth;
 }
 
+body {
+  @apply bg-base-950 text-slate-200 antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 238, 0.07), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 0% 30%, rgba(56, 189, 248, 0.05), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 30%, rgba(129, 140, 248, 0.04), transparent 60%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+  color: #f0fdff;
+}
+
+/* ---------- reusable surfaces ---------- */
+
 .panel {
-  @apply rounded-lg border border-base-700 bg-base-850/70;
+  @apply rounded-xl border border-base-700/70 bg-base-900/80 shadow-card backdrop-blur-sm;
+}
+
+.panel-hover {
+  @apply transition-all duration-200 hover:shadow-card-hover hover:border-accent/30;
 }
 
 .panel-title {
-  @apply text-xs font-semibold uppercase tracking-widest text-slate-400;
+  @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500;
+}
+
+.card {
+  @apply rounded-xl border border-base-700/60 bg-base-900/60;
+}
+
+.chip {
+  @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950 disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50;
+  @apply btn bg-accent text-base-950 hover:bg-cyan-300 hover:shadow-glow-accent-sm active:scale-[0.98];
 }
 
 .btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-md border border-base-600 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-accent/60 hover:text-accent disabled:cursor-not-allowed disabled:opacity-50;
+  @apply btn border border-base-600/80 bg-base-900/40 text-slate-200 hover:border-accent/50 hover:text-accent hover:bg-base-800/60 active:scale-[0.98];
 }
+
+.btn-danger {
+  @apply btn border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:border-red-400/50;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-xs;
+}
+
+/* ---------- inputs ---------- */
 
 .input {
-  @apply w-full rounded-md border border-base-600 bg-base-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-accent/70;
+  @apply w-full rounded-lg border border-base-600/70 bg-base-925 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-accent/60 focus:ring-2 focus:ring-accent/15;
 }
 
-/* tiny custom scrollbars for evidence lists */
+.field-label {
+  @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500;
+}
+
+/* ---------- nav ---------- */
+
+.nav-link {
+  @apply relative inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors duration-150 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50;
+}
+
+.nav-link-active {
+  @apply text-cyan-300;
+}
+
+.nav-link-active::after {
+  content: "";
+  @apply absolute inset-x-3 -bottom-[3px] h-px bg-gradient-to-r from-transparent via-accent to-transparent;
+}
+
+/* ---------- status dot ---------- */
+
+.dot {
+  @apply inline-block h-2 w-2 rounded-full;
+}
+
+.dot-live {
+  @apply dot animate-pulse-dot bg-emerald-400;
+}
+
+.dot-warn {
+  @apply dot animate-pulse-dot-amber bg-amber-400;
+}
+
+.dot-off {
+  @apply dot bg-slate-600;
+}
+
+/* ---------- skeleton shimmer ---------- */
+
+.skeleton {
+  @apply relative overflow-hidden rounded-md bg-base-800/70;
+}
+
+.skeleton::after {
+  content: "";
+  @apply absolute inset-0 animate-shimmer;
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.09), transparent);
+  background-size: 400px 100%;
+}
+
+/* ---------- misc ---------- */
+
+.mono-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-gradient {
+  @apply bg-gradient-to-r from-cyan-300 via-accent to-sky-400 bg-clip-text text-transparent;
+}
+
+.divider {
+  @apply h-px w-full bg-gradient-to-r from-transparent via-base-600/60 to-transparent;
+}
+
+.grid-bg {
+  background-image: linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* thin scrollbars for evidence lists */
 .scroll-slim::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
 .scroll-slim::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #2b3a63;
   border-radius: 3px;
+}
+.scroll-slim::-webkit-scrollbar-thumb:hover {
+  background: #41538a;
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

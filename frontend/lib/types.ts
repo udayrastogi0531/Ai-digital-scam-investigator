@@ -134,12 +134,112 @@ export interface DemoCase {
 
 export interface HealthInfo {
   status: string;
+  app?: string;
+  version?: string;
+  database?: string;
   providers: {
     llm: { name: string; is_mock: boolean; model: string | null };
     threat_intel: { active: string[]; uses_mock: boolean };
     ml: { available: boolean; model: string };
     ocr: { provider: string; is_mock: boolean };
   };
+}
+
+export interface ProviderStatusRow {
+  label: string;
+  detail: string;
+  ok: boolean;
+  mock: boolean;
+}
+
+/** Map a health payload to the status rows shown across the app shell / dashboard. */
+export function healthRows(h: HealthInfo): ProviderStatusRow[] {
+  const ti = h.providers.threat_intel;
+  const rows: ProviderStatusRow[] = [
+    {
+      label: "API",
+      detail: h.status === "ok" ? "Online" : h.status,
+      ok: h.status === "ok",
+      mock: false,
+    },
+    {
+      label: "Database",
+      detail: h.database ?? "Connected",
+      ok: h.status === "ok",
+      mock: false,
+    },
+    {
+      label: "ML",
+      detail: h.providers.ml.available ? h.providers.ml.model : "Unavailable",
+      ok: h.providers.ml.available,
+      mock: false,
+    },
+    {
+      label: "LLM",
+      detail: h.providers.llm.is_mock ? "Deterministic" : h.providers.llm.model ?? "Live",
+      ok: !h.providers.llm.is_mock,
+      mock: h.providers.llm.is_mock,
+    },
+    {
+      label: "Threat Intel",
+      detail: ti.uses_mock ? "Demo / Mock" : ti.active.join(", "),
+      ok: !ti.uses_mock && ti.active.length > 0,
+      mock: ti.uses_mock,
+    },
+    {
+      label: "OCR",
+      detail: h.providers.ocr.is_mock ? "Mock" : h.providers.ocr.provider,
+      ok: !h.providers.ocr.is_mock,
+      mock: h.providers.ocr.is_mock,
+    },
+  ];
+  return rows;
+}
+
+export const RISK_META: Record<RiskLevel, { hex: string; soft: string; text: string; ring: string; label: string }> = {
+  LOW: {
+    hex: "#34d399",
+    soft: "bg-emerald-500/10",
+    text: "text-emerald-300",
+    ring: "ring-emerald-400/30",
+    label: "Low risk",
+  },
+  MEDIUM: {
+    hex: "#fbbf24",
+    soft: "bg-amber-500/10",
+    text: "text-amber-300",
+    ring: "ring-amber-400/30",
+    label: "Medium risk",
+  },
+  HIGH: {
+    hex: "#fb923c",
+    soft: "bg-orange-500/10",
+    text: "text-orange-300",
+    ring: "ring-orange-400/30",
+    label: "High risk",
+  },
+  CRITICAL: {
+    hex: "#f87171",
+    soft: "bg-red-500/10",
+    text: "text-red-300",
+    ring: "ring-red-400/40",
+    label: "Critical risk",
+  },
+};
+
+export function riskMeta(level: RiskLevel | null | undefined) {
+  if (level && RISK_META[level]) return RISK_META[level];
+  return { hex: "#475569", soft: "bg-slate-500/10", text: "text-slate-400", ring: "ring-slate-500/30", label: "Unknown" };
+}
+
+export function formatDate(iso?: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString();
+}
+
+export function formatDay(iso?: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString();
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
