@@ -1,0 +1,44 @@
+# secrets & local env
+.env
+.env.local
+*.env
+!*.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# node
+node_modules/
+.next/
+out/
+npm-debug.log*
+*.tsbuildinfo
+
+# local tool/session metadata (not project content)
+.freebuff/
+
+# runtime data (generated datasets stay generated; model artifact is tracked)
+backend/data/*
+# ...but keep the hand-curated evaluation corpus + dataset docs trackable so a
+# fresh checkout can run the calibration tests and real-data pipeline.
+!backend/data/datasets/
+backend/data/datasets/*
+!backend/data/datasets/.gitkeep
+!backend/data/datasets/README.md
+!backend/data/datasets/real/
+!backend/data/datasets/real/**
+!backend/data/evaluation/
+backend/data/evaluation/*
+!backend/data/evaluation/evaluation_cases.json
+backend/data/uploads/
+*.db
+
+# editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

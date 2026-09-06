@@ -1,0 +1,761 @@
+[
+  {
+    "id": "b01_meeting",
+    "input_type": "text",
+    "text": "Hi Tom, checking if you got my notes for the product review. We moved it to 3pm so it doesn't clash with the vendor call. Let me know if that works for you.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Ordinary workplace chat; no scam signals."
+    }
+  },
+  {
+    "id": "b02_otp_warning",
+    "input_type": "text",
+    "text": "Meridian Bank: never share your OTP or card PIN with anyone. Our staff will never ask for your password or one-time code. If someone requests these, report it to 0345 555 0132 immediately.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: protective bank warning that mentions OTP/password/code — must not be treated as a credential request."
+    }
+  },
+  {
+    "id": "b03_device_alert",
+    "input_type": "text",
+    "text": "Meridian Bank: a new device was used to log in to your online banking at 9:14am. If this was you, no action is needed. If not, please call us on 0345 555 0132.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: genuine security alert with reassurance; contains 'new device' and 'log in' keywords."
+    }
+  },
+  {
+    "id": "b04_delivery_tracking",
+    "input_type": "text",
+    "text": "Your order from GreenLeaf Books is out for delivery and will arrive today by 8pm. Track it at https://www.dhl.com/us-en/home/tracking.html using reference GL88213.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: genuine delivery update with official tracking URL."
+    }
+  },
+  {
+    "id": "b05_recruiter_salary",
+    "input_type": "text",
+    "text": "Hi Alex, thanks for applying for the Senior Engineer role at BlueOrbit. The salary range is $120k-$140k plus equity, and we'd like to schedule a 45-minute video interview next week. Best, the BlueOrbit recruiting team",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: real recruiter mentioning salary — must not trigger job_scam on the word 'salary'."
+    }
+  },
+  {
+    "id": "b06_investment_disclaimer",
+    "input_type": "text",
+    "text": "Important notice: investing involves risk. The value of investments can fall as well as rise, and past performance is not a guarantee of future returns. Please read the product disclosure statement before making a decision.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: legitimate risk disclaimer containing investment/guarantee wording."
+    }
+  },
+  {
+    "id": "b07_password_reset",
+    "input_type": "text",
+    "text": "BlueOrbit: you requested a password reset. Click https://blueorbit.example/reset?token=1a2b3c to choose a new password. The link expires in 24 hours. If you did not request this, you can safely ignore this email.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: genuine password reset from official domain with reassurance."
+    }
+  },
+  {
+    "id": "b08_payment_receipt",
+    "input_type": "text",
+    "text": "Receipt from CloudNest: your subscription payment of $14.99 was received on September 1. Your invoice is available at https://cloudnest.example/invoices. Thank you for being a customer.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: genuine payment confirmation — mentioning 'payment' is not requesting one."
+    }
+  },
+  {
+    "id": "b09_order_update",
+    "input_type": "text",
+    "text": "Hi there, your order #48291 has shipped and is estimated to arrive Wednesday. You can see progress here: https://shop.greenleaf.example/orders/48291. Reply STOP to stop receiving updates.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Normal order-status update."
+    }
+  },
+  {
+    "id": "b10_support",
+    "input_type": "text",
+    "text": "Thanks for contacting Nova Support! Your ticket #10452 has been received and our team will reply within one business day. For faster help, check our FAQ at https://support.nova.example/faq.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Normal customer-support acknowledgement."
+    }
+  },
+  {
+    "id": "b11_promo",
+    "input_type": "text",
+    "text": "Weekend flash sale at CornerCafe: 20% off all lattes this Saturday only. Just show this message at the counter. See the menu at https://cornercafe.example/menu.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Ordinary promotional message from a local business."
+    }
+  },
+  {
+    "id": "b12_whatsapp",
+    "input_type": "text",
+    "text": "Rita: Are you coming to the game on Saturday? Bring snacks! You: Sure, I'll bring chips and dip. Rita: Perfect, see you at 7.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Ordinary WhatsApp conversation."
+    }
+  },
+  {
+    "id": "b13_subscription",
+    "input_type": "text",
+    "text": "Your BlueOrbit Pro subscription renews on October 1 at $99/year. You can manage settings anytime at https://blueorbit.example/account. No action needed if you'd like to continue.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Normal subscription-renewal notice with reassurance."
+    }
+  },
+  {
+    "id": "b14_appointment",
+    "input_type": "text",
+    "text": "Reminder: your appointment with Dr. Okafor is tomorrow at 09:30 at 42 Kings Road. Please arrive 10 minutes early. Reply C to confirm.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Ordinary appointment reminder."
+    }
+  },
+  {
+    "id": "b15_salary",
+    "input_type": "text",
+    "text": "Payroll alert: your salary of $3,200 has been deposited to your account today. Your payslip is available at https://workday.nova.example/payslip.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Normal salary notification."
+    }
+  },
+  {
+    "id": "b16_two_factor",
+    "input_type": "text",
+    "text": "Your Nova verification code is 482913. It expires in 10 minutes. Never share this code with anyone. If you didn't request it, you can ignore this message.",
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "HARD NEGATIVE: genuine 2FA code message — mentions 'verification code' but does not request anything from the recipient."
+    }
+  },
+  {
+    "id": "burl01_official_login",
+    "input_type": "url",
+    "urls": [
+      "https://www.paypal.com/account/login"
+    ],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Official brand login URL must not be flagged."
+    }
+  },
+  {
+    "id": "burl02_sparse",
+    "input_type": "url",
+    "urls": [
+      "https://example.com/contact"
+    ],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Sparse URL: must stay LOW but with low confidence / INSUFFICIENT evidence, never 98% confident."
+    }
+  },
+  {
+    "id": "burl03_docs",
+    "input_type": "url",
+    "urls": [
+      "https://docs.python.org/3/library/json.html"
+    ],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Ordinary documentation URL."
+    }
+  },
+  {
+    "id": "burl04_tracking",
+    "input_type": "url",
+    "urls": [
+      "https://www.dhl.com/us-en/home/tracking.html"
+    ],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "Official courier tracking page."
+    }
+  },
+  {
+    "id": "burl05_shortener_uncertain",
+    "input_type": "url",
+    "urls": [
+      "https://bit.ly/3xK9qR2"
+    ],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "AMBIGUOUS: a bare URL shortener hides the destination; intent is unverifiable, so it must not be confidently LOW+SUFFICIENT and must not be declared a scam on structure alone."
+    }
+  },
+  {
+    "id": "s01_phishing_generic",
+    "input_type": "text",
+    "text": "Dear customer, we noticed unusual activity on your account. Please verify your details within 24 hours to avoid service interruption: https://account-update.example.com/verify. This is an automated security message.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "acceptable_categories": [
+        "account_takeover"
+      ],
+      "note": "Generic phishing: unusual activity + verify + deadline + link. Scores 48-50 with text-only evidence: borderline MEDIUM/HIGH, calibrated at MEDIUM because the 50-point HIGH threshold is not crossed without a corroborating request/URL channel."
+    }
+  },
+  {
+    "id": "s02_mailbox_phishing",
+    "input_type": "text",
+    "text": "Hello, your mailbox is almost full and will be deactivated. Click here to re-activate your email storage: http://mailbox-verify.example.net/login. If you don't act within 48 hours, your messages will be deleted.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Credential-harvesting mailbox phishing with fear and deadline."
+    }
+  },
+  {
+    "id": "s03_subtle_doc_link",
+    "input_type": "text",
+    "text": "Hi, please find the shared document we discussed. Access it through the secure portal: https://docs-share.example.com/view/confirmation?token=1a2b. The link is valid for one day.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "note": "HARD POSITIVE: subtle phishing — no fear or urgency words, but an unsolicited link to a non-official portal."
+    },
+    "known_hard_case": true
+  },
+  {
+    "id": "s04_otp_card",
+    "input_type": "text",
+    "text": "Security alert: we detected an attempted purchase of $890 from your Meridian Bank card. If this wasn't you, your card will be blocked. Reply with the one-time code we just sent to confirm your identity.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "banking_scam",
+      "minimum_risk_level": "HIGH",
+      "note": "Banking phishing: card-block threat + OTP request."
+    }
+  },
+  {
+    "id": "s05_banking_subtle",
+    "input_type": "text",
+    "text": "Dear customer, routine verification is required to keep your card active. Please complete verification using the secure portal at https://meridianbank-secure.example/verify within 72 hours.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "banking_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "HARD POSITIVE: subtle banking phishing — polite, no panic words, non-official verification portal."
+    }
+  },
+  {
+    "id": "s06_kyc",
+    "input_type": "text",
+    "text": "Meridian Bank KYC notice: new regulations require you to update your details. Complete your KYC at https://kyc.meridian-update.example/update or your account will be limited.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "banking_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "KYC-themed banking scam with account-limitation threat. single-theme KYC text: MEDIUM is the calibrated band without a corroborating request channel."
+    }
+  },
+  {
+    "id": "s08_job_fee",
+    "input_type": "text",
+    "text": "Great news — your application for the Social Media Assistant role at VantageMedia was shortlisted! To complete onboarding, pay a refundable registration deposit of $75 at https://vantagemedia-jobs.example/deposit. Positions are limited and the onboarding window closes at midnight.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "job_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Job scam: upfront payment for a 'guaranteed' position. job-fee evidence is single-theme (rules+payment): calibrated at MEDIUM; stronger multi-channel job scams score HIGH."
+    }
+  },
+  {
+    "id": "s09_job_subtle",
+    "input_type": "text",
+    "text": "Your profile has been shortlisted for the Customer Support role at VantageMedia. Complete the onboarding documentation and refundable registration deposit before your joining date to reserve your training slot.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "job_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "HARD POSITIVE: subtle job scam — polite, no panic, refundable deposit."
+    }
+  },
+  {
+    "id": "s10_job_admin_fee",
+    "input_type": "text",
+    "text": "We received your CV for the logistics supervisor role at FreightLink. Our HR policy requires an administration fee of $40 to process your application documents and schedule your interview.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "advance_fee",
+      "minimum_risk_level": "MEDIUM",
+      "acceptable_categories": [
+        "job_scam"
+      ],
+      "note": "Ambiguous: application-fee scam sits between advance-fee and job-scam categories."
+    }
+  },
+  {
+    "id": "s11_investment_guaranteed",
+    "input_type": "text",
+    "text": "Our trading platform guarantees 20% monthly returns with zero risk. Minimum investment is $500 — deposit now, the offer closes tonight and only 15 spots remain. Your personal manager will contact you on WhatsApp.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "investment_scam",
+      "minimum_risk_level": "HIGH",
+      "note": "Investment scam: guaranteed returns + deposit pressure + scarcity."
+    }
+  },
+  {
+    "id": "s12_investment_subtle",
+    "input_type": "text",
+    "text": "Our advisory team has opened a limited allocation for selected investors. Historical returns have been strong and access closes tonight. Fund your account to participate.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "investment_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "HARD POSITIVE: subtle investment pitch — no guarantee wording, but allocation pressure + deposit ask."
+    }
+  },
+  {
+    "id": "s13_crypto_mix",
+    "input_type": "text",
+    "text": "Earn up to 5% daily with our crypto mining pool! Guaranteed payouts and staking rewards for early depositors. Deposit BTC to your mining account today.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "crypto_scam",
+      "minimum_risk_level": "MEDIUM",
+      "acceptable_categories": [
+        "investment_scam"
+      ],
+      "note": "Ambiguous: crypto mining pool overlaps investment-scam categories."
+    }
+  },
+  {
+    "id": "s14_payment_overpayment",
+    "input_type": "text",
+    "text": "Hi, I bought your bike from the marketplace listing. My bank accidentally sent $1,500 instead of $950. Please send the difference of $550 back via PayPal to payment@example.org today.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "payment_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Overpayment trick. overpayment trick is single-theme (rule+payment): calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s15_payment_giftcard",
+    "input_type": "text",
+    "text": "Your order #2201 was flagged for security review. To release it, purchase a $200 Amazon gift card and reply with the redemption code within 24 hours.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "payment_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Gift-card payment demand — near-certain scam. gift-card demand is near-certain but single-channel: calibrated at MEDIUM; CRITICAL is reserved for multi-channel corroboration."
+    }
+  },
+  {
+    "id": "s17_delivery_undeliverable",
+    "input_type": "text",
+    "text": "Your parcel could not be delivered because the address information requires confirmation. Reschedule now at https://track-parcel-status.example/confirm within 24 hours or the package will be returned to sender.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "delivery_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Delivery scam with address-confirmation bait."
+    }
+  },
+  {
+    "id": "s18_delivery_fee",
+    "input_type": "text",
+    "text": "DHL Courier: your package is awaiting a $2.99 redelivery fee. Pay at https://dhl-redelivery.example/pay to receive your parcel today. Unpaid packages are returned after 48 hours.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "delivery_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Delivery scam demanding a fee to release the parcel. delivery-fee text scores 45-49: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s20_impersonation_police",
+    "input_type": "text",
+    "text": "This is Officer Dana Whitfield of the Aldermere Police Department. A warrant has been issued for your arrest over unpaid taxes. Call 555-013-2287 immediately or officers will be sent to your address.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "impersonation_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Law-enforcement impersonation with arrest threat. police impersonation is strong but single-rule: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s21_impersonation_ceo",
+    "input_type": "text",
+    "text": "Hi, this is David Chen from the executive team. I'm in a meeting and need a favor: buy $1,000 in Apple gift cards for a client gift and send the codes to this number when ready. I'll sort the reimbursement tomorrow.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "impersonation_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "CEO/boss impersonation requesting gift cards. BEC/gift-card is single-theme: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s22_impersonation_tax",
+    "input_type": "text",
+    "text": "Notice from the Tax Recovery Office: your tax refund of $1,850 is awaiting release. To claim it, confirm your bank details at https://tax-refund-office.example/claim before the deadline.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "impersonation_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Government-adjacent impersonation collecting bank details. tax-office impersonation is single-theme: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s23_account_new_device",
+    "input_type": "text",
+    "text": "Security alert: a new device signed in to your NovaMail account from an unknown location. If this wasn't you, secure your account immediately: https://novamail-security.example/reset-password",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "account_takeover",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Account-takeover phishing with urgency and a link. device-alert phishing has no credential/otp channel: calibrated at MEDIUM (45-49)."
+    }
+  },
+  {
+    "id": "s24_account_otp_reply",
+    "input_type": "text",
+    "text": "Suspicious sign-in attempt on your account. Reply with the verification code sent to your phone to confirm it's you, otherwise access will be suspended.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "account_takeover",
+      "minimum_risk_level": "MEDIUM",
+      "acceptable_categories": [
+        "banking_scam"
+      ],
+      "note": "Ambiguous: account-security context asking for a code — overlaps banking-scam category."
+    }
+  },
+  {
+    "id": "s25_techsupport_virus",
+    "input_type": "text",
+    "text": "Microsoft: your PC was flagged with error code 0x80072ee2 and is at risk of data loss. Our remote technicians are standing by — download AnyDesk from https://ms-repair.example/anydesk and call 555-013-7741 to fix it now.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "tech_support_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Tech-support scam: fake alert + remote-access software. tech-support text (rules+instructions): calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s27_lottery_won",
+    "input_type": "text",
+    "text": "Congratulations! Your email was selected in the International Lucky Draw and you have won $250,000. To release your winnings, pay the $120 processing fee to our claims agent at claims@lucky-draw.example.org within 48 hours.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "lottery_scam",
+      "minimum_risk_level": "HIGH",
+      "note": "Lottery win notification with fee to release winnings."
+    }
+  },
+  {
+    "id": "s29_crypto_seed_phrase",
+    "input_type": "text",
+    "text": "CoinPulse Support: to restore access to your wallet, enter your 12-word recovery phrase at https://coinpulse-wallet.example/restore. Do not share your phrase with anyone else.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "crypto_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Wallet recovery-phrase request — requesting a seed phrase is always a scam even with protective wording. seed-phrase request is near-certain but single-channel: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s30_crypto_double",
+    "input_type": "text",
+    "text": "Send 0.05 BTC to bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wl to join our trading bot and receive 0.1 BTC back within 10 minutes. Guaranteed profit, limited to the first 50 deposits today.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "crypto_scam",
+      "minimum_risk_level": "HIGH",
+      "note": "Doubling/deposit crypto lure."
+    }
+  },
+  {
+    "id": "s31_romance_rig",
+    "input_type": "text",
+    "text": "Hello my dear, I am a surgeon working on an oil rig in the North Sea and I cannot video call. I love you so much. My pay is blocked and I need $2,000 for a visa to come and meet you. Please send it via Western Union — I will repay you as soon as I can.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "romance_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Romance scam: rapid affection + remote-deployment story + money request. Scores ~49.8: borderline MEDIUM/HIGH, calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s33_advance_inheritance",
+    "input_type": "text",
+    "text": "I am the solicitor handling the estate of a wealthy businessman who shares your surname. You are entitled to $2.5M. Send $150 to cover the legal transfer fee and your bank details to proceed.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "advance_fee",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Inheritance advance-fee scam. inheritance advance-fee is single-theme: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "s35_identity_docs",
+    "input_type": "text",
+    "text": "Meridian Bank: to verify your account, upload a photo of your ID card and a selfie at https://meridian-id.example/upload. Also confirm your date of birth and home address.",
+    "expected": {
+      "is_scam": true,
+      "primary_category": "identity_theft",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Document/identity harvesting under a bank pretext. document-harvesting is single-theme: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "u01_url_lookalike_paypal",
+    "input_type": "url",
+    "urls": [
+      "http://paypa1-secure-login.example.com/account/verify"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "HIGH",
+      "note": "Brand lookalike with login/verify path — no text needed."
+    }
+  },
+  {
+    "id": "u02_url_punycode_apple",
+    "input_type": "url",
+    "urls": [
+      "https://xn--80ak6aa92e.com/login"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Punycode homoglyph: decodes to Cyrillic 'apple' (аррӏе) — brand impersonation without text."
+    }
+  },
+  {
+    "id": "u03_url_substitution_amazon",
+    "input_type": "url",
+    "urls": [
+      "https://amaz0n-order-verify.example.net/signin"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Character substitution (amaz0n) + credential path."
+    }
+  },
+  {
+    "id": "u04_url_ip_login",
+    "input_type": "url",
+    "urls": [
+      "http://185.199.108.133/login"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Raw IP address host with a login path."
+    }
+  },
+  {
+    "id": "u05_url_excessive_subdomains",
+    "input_type": "url",
+    "urls": [
+      "https://secure-login.account-verify.billing-update.example.com/confirm"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Excessive subdomains with credential/billing keywords."
+    }
+  },
+  {
+    "id": "u06_url_risky_tld",
+    "input_type": "url",
+    "urls": [
+      "http://login-secure-verify.xyz/account"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "phishing",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Credential keywords on a commonly-abused TLD, no HTTPS."
+    }
+  },
+  {
+    "id": "m01_banking_strong_mixed",
+    "input_type": "text+url",
+    "text": "Your Meridian Bank account has been locked due to repeated failed attempts. Verify your identity within 24 hours by entering your card PIN and the one-time code at https://meridianbank-secure-login.example.com/verify or your funds will be frozen.",
+    "urls": [],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "banking_scam",
+      "minimum_risk_level": "HIGH",
+      "note": "Strong banking phishing: lock threat + PIN/code request + lookalike URL — must carry high confidence."
+    }
+  },
+  {
+    "id": "m02_delivery_mixed",
+    "input_type": "text+url",
+    "text": "Your order was returned to sender because the address could not be confirmed. Pay the $3.99 redelivery fee within 24 hours to reschedule.",
+    "urls": [
+      "https://www.dhl.com/us-en/home/tracking.html"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "delivery_scam",
+      "minimum_risk_level": "MEDIUM",
+      "note": "Delivery fee scam; the official URL in the message must not dilute the textual scam evidence. delivery-fee text with an official URL present: calibrated at MEDIUM."
+    }
+  },
+  {
+    "id": "m03_subtle_official_url",
+    "input_type": "text+url",
+    "text": "We noticed a new sign-in from an unfamiliar device. To keep your account safe, please re-verify your identity through the link below.",
+    "urls": [
+      "https://www.paypal.com/account/login"
+    ],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "account_takeover",
+      "minimum_risk_level": "MEDIUM",
+      "acceptable_categories": [
+        "phishing",
+        "banking_scam"
+      ],
+      "note": "Subtle: credible story + official-looking URL; the requestive 're-verify' keeps it suspicious despite the clean domain. Banking-scam overlap is accepted: account-security verification language triggers the banking rule set."
+    }
+  },
+  {
+    "id": "p3a_suspicious_url_neutral_text",
+    "input_type": "text+url",
+    "text": "Hi, this invoice arrived in my inbox this morning. Is it legit? http://paypa1-verify.example.net/invoice?cmd=_verify&email=user@example.net",
+    "urls": [],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "payment_scam",
+      "acceptable_categories": [
+        "phishing"
+      ],
+      "minimum_risk_level": "HIGH",
+      "note": "PHASE 3: strong URL-anchored evidence (brand lookalike + credential path) next to otherwise neutral text must NOT be diluted to LOW by the silent text channels."
+    }
+  },
+  {
+    "id": "p3b_strong_url_weak_text",
+    "input_type": "text+url",
+    "text": "Someone sent me this, can you take a look? http://xn--80ak6aa92e.com/verify",
+    "urls": [],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "unknown",
+      "minimum_risk_level": "MEDIUM",
+      "note": "PHASE 3: homoglyph/punycode URL with weak text must stay meaningfully risky, while the category honestly stays unknown (no textual evidence of intent)."
+    }
+  },
+  {
+    "id": "p3c_benign_official_url_scammy_words",
+    "input_type": "text+url",
+    "text": "URGENT security notice for PayPal users: scammers send fake 'account suspended' emails asking for your password and OTP. PayPal will never ask for these by message. To check your account, always open https://www.paypal.com yourself and log in.",
+    "urls": [],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "PHASE 3: HARD NEGATIVE — scam-like vocabulary (verify/OTP/suspended/password) with an official brand URL in a protective-warning context must not become suspicious."
+    }
+  },
+  {
+    "id": "p3d_insufficient_evidence",
+    "input_type": "text",
+    "text": "Check this.",
+    "urls": [],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "PHASE 3: sparse input carries no scam signal — LOW must be reported with INSUFFICIENT evidence (not as a confident safe verdict)."
+    }
+  },
+  {
+    "id": "p3e_partial_evidence_shortener",
+    "input_type": "text+url",
+    "text": "Hey, look at this https://bit.ly/9xKqR3m",
+    "urls": [],
+    "expected": {
+      "is_scam": false,
+      "primary_category": "unknown",
+      "minimum_risk_level": "LOW",
+      "note": "PHASE 3: a bare shortener is PARTIAL evidence — LOW with limited confidence, uncertainty surfaced rather than a clean verdict."
+    }
+  },
+  {
+    "id": "p3f_intel_positive_neutral_text",
+    "input_type": "text+url",
+    "text": "Please review the attached link: https://paypa1-login.example.com/webscr",
+    "urls": [],
+    "expected": {
+      "is_scam": true,
+      "primary_category": "unknown",
+      "minimum_risk_level": "MEDIUM",
+      "note": "PHASE 3: threat-intel positive (demo feed suspicious verdict for paypa1-login.example.com) with neutral text stays meaningfully risky; provider verdict is not diluted by the text."
+    }
+  }
+]
