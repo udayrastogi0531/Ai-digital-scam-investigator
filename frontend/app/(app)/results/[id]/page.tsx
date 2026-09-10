@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   ShieldQuestion,
 } from "lucide-react";
-import { EvidenceGroup, EntityChips, ScamTypePill, Timeline } from "@/components/investigation";
+import { EvidenceGroup, EntityChips, ScamTypePill, SEVERITY_ICON, Timeline } from "@/components/investigation";
 import { ErrorBanner, RiskBadge, RiskGauge, SectionHeader, Skeleton, Spinner } from "@/components/ui";
 import { getInvestigation } from "@/lib/api";
 import type { InvestigationView, RiskLevel } from "@/lib/types";
@@ -71,8 +71,8 @@ function ThreatIntelView({ inv }: { inv: InvestigationView }) {
       <div className="flex items-center justify-between gap-2">
         <h2 className="panel-title">Threat intelligence</h2>
         {mock && (
-          <span className="chip border-amber-400/30 bg-amber-400/10 text-[10px] uppercase tracking-wide text-amber-300">
-            Demo / mock
+          <span className="chip border-slate-500/40 bg-slate-500/10 text-[10px] uppercase tracking-wide text-slate-400">
+            Local provider
           </span>
         )}
       </div>
@@ -106,7 +106,7 @@ function ThreatIntelView({ inv }: { inv: InvestigationView }) {
                         <span className="font-mono text-accent/80">{String(p.provider ?? "")}</span>
                         <span>{String(p.verdict ?? "unknown")}</span>
                         {failed && <span className="text-amber-300">({pStatus})</span>}
-                        {p.is_mock === true && <span className="text-amber-300/80">[demo]</span>}
+                        {p.is_mock === true && <span className="text-slate-500">[local]</span>}
                         {p.error ? <span className="text-red-300/70">{String(p.error)}</span> : null}
                       </li>
                     );
@@ -118,9 +118,10 @@ function ThreatIntelView({ inv }: { inv: InvestigationView }) {
         })}
       </ul>
       {mock && (
-        <p className="mt-3 text-[11px] leading-relaxed text-amber-200/70">
-          No real threat-intelligence API is configured — these results come from a local demo provider
-          and are not external verification.
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+          No external threat-intelligence API is configured — these lookups come from the built-in local
+          provider and are not external verification. Connect Safe Browsing / VirusTotal keys server-side
+          to enable live lookups.
         </p>
       )}
     </section>
@@ -194,11 +195,18 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
   }
 
   const risk = inv.risk;
-  const demoMode =
-    inv.warnings.some((w) => /demo|mock/i.test(w)) ||
-    String(inv.processing_metadata?.provider_mode ?? "").includes("mock");
 
-  const flagged = inv.evidence.filter((e) => e.severity === "high" || e.severity === "critical").slice(0, 8);
+  // Honest provider notice: appears only when mock/local providers actually
+  // produced evidence — never presented as a product-wide “demo mode”.
+  const localProviders = inv.evidence.some(
+    (e) =>
+      e.source === "threat_intelligence" ||
+      e.source === "ocr" ||
+      (e.detail && (e.detail as Record<string, unknown>).is_mock === true) ||
+      (e.description ?? "").includes("[DEMO]")
+  );
+
+  const flagged = inv.evidence.filter((e) => e.severity === "high" || e.severity === "critical").slice(0, 10);
 
   return (
     <div className="space-y-6">
@@ -221,7 +229,7 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
 
-      {/* warnings + demo notice */}
+      {/* warnings + local-provider notice */}
       {inv.warnings.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 text-sm text-amber-200">
           <div className="mb-1 flex items-center gap-2 font-semibold">
@@ -234,10 +242,14 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
           </ul>
         </div>
       )}
-      {demoMode && (
-        <div className="rounded-xl border border-accent/25 bg-accent/[0.05] px-4 py-2.5 text-xs text-cyan-200">
-          Demo mode: running without paid APIs — explanations are deterministic and threat-intel / OCR
-          results are local mocks. Enable real providers via backend environment variables.
+      {localProviders && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-base-600/50 bg-base-900/60 px-4 py-2.5 text-xs text-slate-400">
+          <ShieldQuestion className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
+          <span>
+            This report used the built-in local OCR / threat-intelligence providers — no external
+            API is configured. Core analysis (extraction, patterns, URL structure, ML, risk) is fully
+            active; optional integrations can be enabled server-side.
+          </span>
         </div>
       )}
 
@@ -272,27 +284,40 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
               {risk.contributors.length === 0 ? (
                 <p className="mt-3 text-sm text-slate-500">No contributing factors were recorded.</p>
               ) : (
-                <ul className="mt-3 space-y-2">
-                  {risk.contributors.slice(0, 8).map((c) => (
-                    <li key={c.name} className="flex items-center gap-3 text-sm">
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                          c.impact > 0 ? "bg-red-400" : c.impact < 0 ? "bg-emerald-400" : "bg-slate-500"
-                        }`}
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1 truncate text-slate-300" title={c.name}>
-                        {c.name}
-                      </span>
-                      <span
-                        className={`mono-tabular shrink-0 font-mono text-xs ${
-                          c.impact > 0 ? "text-red-300" : c.impact < 0 ? "text-emerald-300" : "text-slate-500"
-                        }`}
-                      >
-                        {c.impact > 0 ? `+${Math.round(c.impact)}` : Math.round(c.impact)}
-                      </span>
-                    </li>
-                  ))}
+                <ul className="mt-3 space-y-2.5">
+                  {risk.contributors.slice(0, 8).map((c) => {
+                    const mag = Math.min(1, Math.abs(c.impact));
+                    const positive = c.impact > 0;
+                    return (
+                      <li key={c.name} className="text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="min-w-0 flex-1 truncate text-slate-300" title={c.name}>
+                            {c.name}
+                          </span>
+                          <span
+                            className={`mono-tabular shrink-0 font-mono text-xs ${
+                              positive ? "text-red-300" : c.impact < 0 ? "text-emerald-300" : "text-slate-500"
+                            }`}
+                          >
+                            {c.impact > 0 ? `+${Math.round(c.impact * 100) / 100}` : Math.round(c.impact * 100) / 100}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-base-800">
+                          <div
+                            className={`h-full origin-left animate-bar-grow rounded-full ${
+                              positive
+                                ? "bg-gradient-to-r from-orange-500/70 to-red-400"
+                                : c.impact < 0
+                                  ? "bg-gradient-to-r from-emerald-500/70 to-emerald-400"
+                                  : "bg-slate-500/60"
+                            }`}
+                            style={{ width: `${mag * 100}%` }}
+                          />
+                        </div>
+                        {c.detail && <p className="mt-1 text-xs leading-relaxed text-slate-500">{c.detail}</p>}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -320,14 +345,22 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
             <AlertOctagon className="h-4 w-4 text-red-400" aria-hidden />
             <h2 className="panel-title">Why this was flagged</h2>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {flagged.map((e, i) => (
-              <span
+              <div
                 key={`${e.source}-${e.signal}-${i}`}
-                className="chip border-red-500/25 bg-red-500/[0.07] text-[12px] text-red-200"
+                className="flex items-start gap-2.5 rounded-lg border border-red-500/20 bg-red-500/[0.05] px-3.5 py-3"
               >
-                {e.description || `${e.source} · ${e.signal}`}
-              </span>
+                <span className="mt-0.5 shrink-0">{SEVERITY_ICON[e.severity] ?? <ShieldQuestion className="h-4 w-4 text-orange-400" aria-hidden />}</span>
+                <div className="min-w-0">
+                  <div className="text-sm leading-snug text-red-100">
+                    {e.description || `${e.source} · ${e.signal}`}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-red-300/60">
+                    {e.source} · {e.signal} · {e.severity}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </section>

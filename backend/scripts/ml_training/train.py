@@ -82,6 +82,12 @@ def main() -> int:
         help="train on repeated rows too (their frequency is part of the distribution). "
         "The synthetic generator's template draws repeat; the Phase-2 model used them.",
     )
+    parser.add_argument(
+        "--no-categories",
+        action="store_true",
+        help="relax scam-category validation (for corpora without category labels, e.g. the "
+        "UCI SMS Spam Collection). Labels and structure are still validated strictly.",
+    )
     args = parser.parse_args()
 
     if not args.dataset.exists():
@@ -89,7 +95,9 @@ def main() -> int:
         return 1
 
     try:
-        rows, stats = load_dataset(args.dataset, deduplicate=not args.keep_duplicates)
+        rows, stats = load_dataset(
+            args.dataset, deduplicate=not args.keep_duplicates, require_categories=not args.no_categories
+        )
     except DatasetValidationError as exc:
         print(f"dataset rejected: {exc}")
         return 1
@@ -172,11 +180,73 @@ def main() -> int:
     REPORT.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"saved evaluation report -> {REPORT}")
 
+    md_report = REPORT.with_suffix(".md")
+    md_report.write_text(_markdown_report(metrics, stats), encoding="utf-8")
+    print(f"saved markdown evaluation report -> {md_report}")
+
     # top contributing features (by |coefficient|)
     coefs = pipeline.named_steps["clf"].coef_[0]
     ranked = sorted(zip(FEATURE_NAMES, coefs), key=lambda kv: abs(kv[1]), reverse=True)
     print("top features:", [(name, round(c, 3)) for name, c in ranked[:12]])
     return 0
+
+
+def _markdown_report(metrics: dict, stats) -> str:
+    """Render the honest human-readable training report (same numbers as the JSON)."""
+    cm = metrics["confusion_matrix"]
+    tn, fp = cm[0]
+    fn, tp = cm[1]
+    rows = [
+        "# ML training evaluation report",
+        "",
+        f"**Dataset:** `{metrics['dataset']}`",
+        f"**Dataset origin:** `{metrics['dataset_origin'].upper()}`",
+        "",
+        "## Dataset",
+        "",
+        f"- Rows after validation/dedup: **{metrics['n_samples']}**",
+        f"- Train / validation / test: **{metrics['n_train']} / {metrics['n_val']} / {metrics['n_test']}** (stratified by label, deterministic seed)",
+        f"- Label distribution (dataset): scam `{metrics['class_distribution']['scam']}`, benign `{metrics['class_distribution']['benign']}`",
+        f"- Test-label distribution: scam `{tp + fn}`, benign `{tn + fp}`",
+    ]
+    if getattr(stats, "duplicates_removed", 0):
+        rows.append(f"- Exact duplicates removed: **{stats.duplicates_removed}**")
+    if getattr(stats, "malformed_rows", 0):
+        rows.append(f"- Malformed rows rejected: **{stats.malformed_rows}**")
+    rows += [
+        "",
+        "## Metrics (held-out test split)",
+        "",
+        f"| Metric | Value |",
+        f"|---|---|",
+        f"| Accuracy | {metrics['accuracy']:.4f} |",
+        f"| Precision | {metrics['precision']:.4f} |",
+        f"| Recall | {metrics['recall']:.4f} |",
+        f"| F1 | {metrics['f1']:.4f} |",
+        f"| ROC-AUC | {metrics['roc_auc']:.4f} |",
+        "",
+        "## Confusion matrix (benign=0, scam=1)",
+        "",
+        f"```\n{tn:>6} {fp:>6}\n{fn:>6} {tp:>6}\n```",
+        "",
+        "| | Predicted benign | Predicted scam |",
+        "|---|---|---|",
+        f"| Actual benign | {tn} | {fp} |",
+        f"| Actual scam | {fn} | {tp} |",
+        "",
+        "## Leakage protection",
+        "",
+        "- The pipeline evaluation corpus (`data/evaluation/evaluation_cases.json`) is refused by the",
+        "  dataset loader and never enters training or these numbers.",
+        "- Rows with ids matching evaluation-corpus ids are rejected (contamination guard).",
+        "- Exact duplicate texts/ids are removed before splitting; the split is stratified by label.",
+        "",
+        "## Honesty note",
+        "",
+        metrics["honesty_note"],
+        "",
+    ]
+    return "\n".join(rows)
 
 
 if __name__ == "__main__":

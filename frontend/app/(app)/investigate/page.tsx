@@ -78,8 +78,8 @@ function ProcessingOverlay({ done }: { done: boolean }) {
         </div>
 
         <p className="mt-5 text-[10px] leading-relaxed text-slate-600">
-          Stages shown for guidance — the engine reports real node completion in the investigation
-          timeline on the result page.
+          Stages shown for guidance — the engine reports real measured stage durations in the
+          investigation timeline on the result page.
         </p>
       </div>
     </div>
@@ -103,7 +103,15 @@ export default function InvestigatePage() {
   function addUrl() {
     const trimmed = urlInput.trim();
     if (!trimmed) return;
+    if (urls.length >= 20) {
+      setError("You can add at most 20 URLs per investigation.");
+      return;
+    }
     const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+    if (!/^https?:\/\/\S+$/i.test(withScheme)) {
+      setError("That does not look like a valid URL.");
+      return;
+    }
     if (!urls.includes(withScheme)) setUrls((u) => [...u, withScheme]);
     setUrlInput("");
   }
@@ -226,6 +234,7 @@ export default function InvestigatePage() {
               Add
             </button>
           </div>
+          <div className="mt-1 text-right font-mono text-[10px] text-slate-600">{urls.length} / 20 URLs</div>
           {urls.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {urls.map((u) => (

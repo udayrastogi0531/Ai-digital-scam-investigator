@@ -4,7 +4,11 @@ Data-layer honesty rules (enforced here, not just documented):
 
 * **Synthetic vs real.** ``data/datasets/scam_messages.csv`` is the
   synthetic/demo training set used to keep the training pipeline exercised
-  offline.  It is labelled as synthetic in every report.
+  offline.  ``data/datasets/real/sms_spam_uci.csv`` is the real labelled
+  corpus (UCI SMS Spam Collection v.1, CC BY 4.0 — see
+  ``data/datasets/README.md`` for provenance) and is the default
+  production-minded training source.  Both are labelled as their true
+  origin in every report.
 * **Evaluation is never training.** The evaluation corpus
   (``data/evaluation/evaluation_cases.json``) measures the *whole* pipeline
   and is never loaded by this module — its rows must never reach a model

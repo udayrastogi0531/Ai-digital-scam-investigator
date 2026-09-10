@@ -53,6 +53,7 @@ class InvestigationListItem(BaseModel):
     risk_level: str | None = None
     scam_type: str | None = None
     input_types: list[str] = Field(default_factory=list)
+    evidence_sufficiency: str | None = None  # INSUFFICIENT | PARTIAL | SUFFICIENT
     created_at: datetime | None = None
 
 

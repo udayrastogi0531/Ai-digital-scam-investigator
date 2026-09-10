@@ -11,17 +11,20 @@ from __future__ import annotations
 
 from app.analysis.text_signals import analyze_text_signals
 from app.extraction.text_extractor import extract_all
-from app.extraction.url_analysis import analyze_url
 from app.patterns.engine import match_rules
 
+# URL *presence* features are deliberately absent.  This product
+# investigates suspicious URLs by design, so “a URL is present” is
+# uninformative for the language model — and URL structural risk is already
+# scored deterministically by the ``url_risk`` channel (plus threat
+# intelligence).  Training the ML on URL-presence would double-count URL
+# evidence and taught the SMS-trained model to flag *any* URL-heavy message
+# as spam, inflating confidence on sparse URL submissions.  URL findings
+# still flow into the feature vector via ``scam_keyword_hits`` / text
+# signals when the surrounding language is suspicious.
 FEATURE_NAMES = [
     "message_length",
     "word_count",
-    "url_count",
-    "max_url_length",
-    "suspicious_tld_count",
-    "ip_url_count",
-    "shortener_count",
     "special_char_frequency",
     "uppercase_ratio",
     "urgency_score",
@@ -40,12 +43,6 @@ FEATURE_NAMES = [
     "punctuation_ratio",
 ]
 
-RISKY_TLDS = {
-    "tk", "ml", "ga", "cf", "gq", "top", "xyz", "click", "link", "support",
-    "rest", "stream", "download", "cam", "work", "country", "review", "loan",
-    "date", "win", "bid", "racing", "accountant", "site",
-}
-
 SPECIAL_CHARS = set("_@%*&!")
 
 
@@ -60,7 +57,12 @@ def extract_features(
     text_signals=None,
     url_analyses=None,
 ) -> dict[str, float]:
-    """Compute the feature vector as an ordered dict keyed by FEATURE_NAMES."""
+    """Compute the feature vector as an ordered dict keyed by FEATURE_NAMES.
+
+    ``url_analyses`` is accepted for API compatibility with the graph nodes
+    but not consumed: URL risk is scored by the deterministic ``url_risk``
+    channel, not the ML language model (see the FEATURE_NAMES note).
+    """
     from app.utils.text import normalize_text
 
     text = normalize_text(text)
@@ -69,17 +71,9 @@ def extract_features(
         entities = extract_all(text)
     if text_signals is None:
         text_signals = analyze_text_signals(text)
-    if url_analyses is None:
-        url_analyses = [analyze_url(u.value) for u in entities.urls]
 
     lower = text.lower()
     total_chars = max(len(text), 1)
-
-    url_count = len(entities.urls)
-    max_url_length = max((u.url_length for u in url_analyses), default=0)
-    suspicious_tlds = sum(1 for u in url_analyses if u.tld and u.tld.lower() in RISKY_TLDS)
-    ip_urls = sum(1 for u in url_analyses if u.has_ip_address)
-    shorteners = sum(1 for u in url_analyses if u.is_shortened)
 
     special_chars = sum(1 for ch in text if ch in SPECIAL_CHARS)
     punctuation = sum(1 for ch in text if ch in ".,;:!?")
@@ -90,11 +84,6 @@ def extract_features(
     return {
         "message_length": float(len(text)),
         "word_count": float(len(text.split())),
-        "url_count": float(url_count),
-        "max_url_length": float(max_url_length),
-        "suspicious_tld_count": float(suspicious_tlds),
-        "ip_url_count": float(ip_urls),
-        "shortener_count": float(shorteners),
         "special_char_frequency": special_chars / total_chars,
         "uppercase_ratio": uppercase / total_chars,
         "urgency_score": text_signals.urgency_score,

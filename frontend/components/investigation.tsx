@@ -5,7 +5,7 @@ import { SeverityDot } from "@/components/ui";
 import type { EvidenceSignal, TimelineEntry } from "@/lib/types";
 import { SEVERITY_STYLE, categoryLabel } from "@/lib/types";
 
-const SEVERITY_ICON: Record<string, React.ReactNode> = {
+export const SEVERITY_ICON: Record<string, React.ReactNode> = {
   critical: <AlertOctagon className="h-4 w-4 text-red-400" aria-hidden />,
   high: <ShieldAlert className="h-4 w-4 text-orange-400" aria-hidden />,
   medium: <AlertTriangle className="h-4 w-4 text-amber-400" aria-hidden />,

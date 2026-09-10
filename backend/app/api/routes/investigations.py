@@ -63,6 +63,7 @@ async def list_investigations(
     search: str | None = Query(None, max_length=200),
     risk_level: str | None = Query(None, pattern="^(?i)(LOW|MEDIUM|HIGH|CRITICAL)$"),
     scam_type: str | None = Query(None, max_length=64),
+    input_type: str | None = Query(None, pattern="^(?i)(text|url|image)$"),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedInvestigations:
     return await svc.list_investigations(
@@ -72,6 +73,7 @@ async def list_investigations(
         search=search,
         risk_level=risk_level,
         scam_type=scam_type,
+        input_type=input_type,
     )
 
 

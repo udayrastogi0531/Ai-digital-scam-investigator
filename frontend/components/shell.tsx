@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Activity, History, LayoutDashboard, Menu, Plus, X } from "lucide-react";
 import { getHealth } from "@/lib/api";
 import type { HealthInfo } from "@/lib/types";
+import { systemState } from "@/lib/types";
 import { Logo } from "@/components/ui";
 
 const NAV = [
@@ -36,20 +37,21 @@ function SystemPill({ health }: { health: HealthInfo | null }) {
   if (!health) {
     return (
       <span className="chip border-base-600/60 bg-base-800/50 text-slate-500">
-        <Activity className="h-3 w-3" aria-hidden /> Checking…
+        <Activity className="h-3 w-3" aria-hidden /> Checking system…
       </span>
     );
   }
-  const demo = health.providers.llm.is_mock && health.providers.threat_intel.uses_mock;
+  const state = systemState(health);
   return (
     <span
-      className={`chip border-base-600/60 bg-base-800/50 ${
-        demo ? "text-amber-300/90" : "text-emerald-300/90"
-      }`}
-      title={demo ? "Demo mode — no external APIs configured" : "Live providers configured"}
+      className={`chip border-base-600/60 bg-base-800/50 ${state.ok ? "text-emerald-300/90" : "text-red-300/90"}`}
+      title={`System status — ${state.detail}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${demo ? "bg-amber-400" : "bg-emerald-400"}`} aria-hidden />
-      {demo ? "Demo mode" : "Live mode"}
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${state.ok ? "animate-pulse-dot bg-emerald-400" : "bg-red-400"}`}
+        aria-hidden
+      />
+      System · {state.label}
     </span>
   );
 }

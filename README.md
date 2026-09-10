@@ -111,7 +111,7 @@ intelligence.
 | 🏷️ **Entity Extraction** | URLs, emails, phone numbers, monetary amounts, companies, banks, organizations, dates — surfaced in the report. |
 | 🛰️ **Threat Intelligence** | Google Safe Browsing and VirusTotal providers (live, env-keyed) with a normalized boundary; deterministic demo provider by default. Failures are `unavailable`/`error`/`rate_limited` — never "clean". |
 | 🕸️ **Pattern Detection** | 30+ scam-pattern rules across banking, phishing, impersonation, job/advance-fee, delivery, lottery, romance, crypto, tech-support and account-takeover families. |
-| 🤖 **ML Signal** | scikit-learn LogisticRegression classifier over hand-built features contributes a probability signal — the smallest risk weight by design, never the final verdict. *(Synthetic-trained demo model — see [AI / ML Architecture](#ai--ml-architecture).)* |
+| 🤖 **ML Signal** | scikit-learn LogisticRegression classifier over language/text features contributes a probability signal — the smallest risk weight by design, never the final verdict. Trained on the real UCI SMS Spam Collection (5,159 messages, CC BY 4.0) — see [AI / ML Architecture](#ai--ml-architecture). |
 | ⚖️ **Risk Scoring** | Deterministic weighted engine producing a 0–100 score, risk band (LOW/MEDIUM/HIGH/CRITICAL), confidence and per-signal contributors. |
 | 🧩 **Evidence Correlation** | Quality-weighted aggregation — applicable-but-silent channels drop out of normalization; strong evidence is not diluted. |
 | ⏱️ **Evidence Timeline** | Every stage of the LangGraph run is recorded with durations (parse, OCR, analyze, URL, entities, intel, ML, correlate, risk, explain, report). |
@@ -215,20 +215,53 @@ entries are de-duplicated defensively.
 
 ## AI / ML Architecture
 
-**Machine learning.** The classifier is a scikit-learn `LogisticRegression` over
-feature-engineered signals (URL structure, keyword/intent features, entity presence). It ships
-as a `.joblib` pipeline and is exposed through `app/ml/` (`features`, `classifier`,
-`service`, `dataset`). Its output is one weighted input signal — the smallest weight in the
-engine — and it never overrides the deterministic verdict.
+### Machine Learning
 
-> ⚠️ **The shipped model is trained on a synthetic dataset** (`data/datasets/scam_messages.csv`,
-> deterministically generated, origin labeled `synthetic`). It exists to power demo mode and to
-> exercise the pipeline. The repo includes a validated **real-data loader** and training
-> pipeline (`app/ml/dataset.py`, `scripts/ml_training/train.py`) with a documented schema
-> (`data/datasets/README.md`), stratified train/validation/test splits, duplicate/malformed-row
-> validation, and hard guards that keep the evaluation corpus out of training data — so a vetted
-> real dataset drops in without code changes. **No real-world metrics are claimed from the
-> synthetic model.**
+**Model.** A scikit-learn `LogisticRegression` (StandardScaler → LR, `C=0.8`,
+`class_weight="balanced"`) over feature-engineered **language/text signals** — message length,
+word counts, urgency/fear/reward/pressure scores, credential/OTP/payment-request intents,
+entity presence, punctuation and casing statistics. URL-*presence* features are deliberately
+absent: this product investigates suspicious URLs by design, so “a URL is present” is
+uninformative for the language model, and URL structural risk is already scored
+deterministically by the `url_risk` channel (threat intel included). The model ships as a
+`.joblib` pipeline exposed through `app/ml/` (`features`, `classifier`, `service`, `dataset`)
+and contributes one weighted input signal — the smallest weight in the engine — it never
+overrides the deterministic verdict.
+
+**Training data.** The shipped model is trained on the **real UCI SMS Spam Collection v.1**
+(`backend/data/datasets/real/sms_spam_uci.csv`, 5,159 messages, **CC BY 4.0** — full provenance
+in `backend/data/datasets/README.md`). The synthetic set (`data/datasets/scam_messages.csv`)
+remains for offline pipeline exercise. Training uses the validated loader with stratified
+splits, exact-duplicate removal, malformed-row rejection, and a hard guard that refuses the
+evaluation corpus (contamination protection). Reproduce with:
+
+```bash
+cd backend
+.venv/Scripts/python.exe scripts/ml_training/train.py --dataset data/datasets/real/sms_spam_uci.csv --no-categories
+```
+
+**ML model evaluation** (held-out test split of the UCI corpus, seed 42):
+
+| Metric | Value |
+|---|---|
+| Train / validation / test | 3,611 / 516 / 1,032 |
+| Class distribution (corpus) | 4,517 benign / 642 scam (13% prevalence) |
+| Accuracy | 0.9312 |
+| Precision | 0.6748 |
+| Recall | 0.8594 |
+| F1 | 0.7560 |
+| ROC-AUC | 0.9705 |
+| Confusion matrix (test) | benign 851/53 · scam 18/110 |
+| Decision threshold | 0.55 (max-F1 on the validation split) |
+
+**Honest limits of the real corpus.** The UCI SMS set is **SMS spam/ham supervision** — it is
+not a complete phishing/URL/scam dataset: 13% scam prevalence, no crypto-transfer or
+URL-heavy content, and English-only messages. Scam categories beyond SMS spam (banking
+phishing, impersonation, job/advance-fee, delivery, crypto wallet drains, …) therefore
+continue to depend primarily on the deterministic channels — pattern rules, NLP text signals,
+URL analysis, threat intelligence and evidence correlation. The ML signal is one probabilistic
+input, and the risk engine's smallest weight (`0.10`) reflects that. Do **not** treat SMS-only
+training as evidence the model detects every type of scam.
 
 **LLM.** An optional OpenAI-compatible provider (any base URL — `gpt-4o-mini` by default) is
 used for classification refinement and explanation/report synthesis. It receives **only the
@@ -236,6 +269,21 @@ structured evidence** (`ReportContext`) under an evidence-only prompt contract: 
 threat-intelligence results or external facts, and it cannot change the risk score. Malformed,
 empty or failed LLM output falls back to the deterministic explanation/report
 (`provider = "deterministic-fallback"`). Without a key, the system runs fully deterministic.
+
+### Evaluation
+
+Two separate measurement regimes exist, and their numbers must **never** be combined:
+
+| Regime | What it measures | Corpus | Metrics |
+|---|---|---|---|
+| **ML model evaluation** | The classifier alone, on a held-out split of its own training data (never the evaluation corpus) | Real UCI SMS Spam Collection — 5,159 rows, stratified split | F1 0.756, ROC-AUC 0.9705, precision 0.6748, recall 0.8594 (see [Machine Learning](#machine-learning)) |
+| **End-to-end detection calibration** | The whole pipeline (extraction → URL → text → patterns → ML → correlation → risk → report) | 64 **fictional** evaluation cases (24 benign / 40 scam) | Binary F1 0.9873, accuracy 0.9844, precision 1.0, recall 0.975, category accuracy 0.975, 0 false positives, 1 documented false negative |
+
+The 64-case corpus (`backend/data/evaluation/evaluation_cases.json`) is **fictional calibration
+material, not real user data** — it is refused by the training loader, never enters ML metrics,
+and is not representative of real-world prevalence. Real-data ML metrics come only from the
+UCI held-out test split; run both with `scripts/evaluate_detection.py` and
+`scripts/ml_training/train.py`.
 
 ---
 
@@ -555,7 +603,7 @@ Without any credentials the application runs in **DEMO mode**:
 - LLM → deterministic local explanations (`LLM_PROVIDER=mock`)
 - Threat intel → labeled demo provider (`[DEMO]`, fictional blocklist)
 - OCR → mock (if no Tesseract binary is found)
-- ML → synthetic-trained LogisticRegression model
+- ML → the real-data-trained LogisticRegression model (the *external providers* are the only mock components)
 - Database → SQLite local file
 
 The health endpoint and dashboard report `demo_mode: true` and every mock artifact is visibly
@@ -609,7 +657,7 @@ backend/
     schemas/         Pydantic contracts
     services/        investigation orchestration
   data/
-    datasets/        synthetic training data + real-data schema docs
+    datasets/        real UCI SMS corpus + synthetic set + provenance docs + training reports
     evaluation/      evaluation_cases.json (tracked)
   scripts/
     evaluate_detection.py   64-case calibration harness
@@ -629,9 +677,13 @@ docker-compose.yml   postgres + backend + frontend
 
 Honest, current constraints:
 
-- **The shipped ML model is synthetic-trained** — it demonstrates the pipeline and powers demo
-  mode; real-data training is wired and documented but no real dataset is committed.
-- **Evaluation metrics measure the 64-case corpus**, not real-world prevalence.
+- **The shipped ML model is trained on the real UCI SMS corpus** (SMS spam/ham, CC BY 4.0). It
+  generalizes well to SMS spam but is **not** a complete phishing/URL/scam dataset — other scam
+  categories rely on rules, NLP, URL analysis, threat intelligence and evidence correlation.
+- **ML metrics** (F1 0.756 on the UCI held-out test split) measure the *model*; **end-to-end
+  detection metrics** (F1 0.987 on the 64-case fictional corpus) measure the *whole pipeline*.
+  The two must never be combined — see [AI / ML Architecture](#ai--ml-architecture) and
+  [Evaluation](#evaluation).
 - **No live integration was executed without credentials** — Safe Browsing, VirusTotal, LLM and
   Tesseract OCR are verified via offline/fallback paths and opt-in live tests.
 - **One documented false negative** remains in the corpus (subtle doc-link social engineering).
@@ -645,8 +697,10 @@ Honest, current constraints:
 
 Concrete, engineering-backed next steps (not commitments):
 
-1. Retrain the classifier on a vetted real dataset via the existing loader/trainer.
-2. Parallel provider fan-out with timeouts for lower live-query latency.
+1. ✅ **Done:** retrained the classifier on the real UCI SMS corpus via the existing loader/trainer.
+2. Broaden training data beyond SMS (phishing/URL-heavy labelled corpora) to widen the ML
+   channel's coverage while keeping the deterministic channels primary.
+3. Parallel provider fan-out with timeouts for lower live-query latency.
 3. Multiclass category head so category quality is trained and measured, not rules-only.
 4. Add a CI workflow running the full gate (backend pytest, evaluation harness, E2E, frontend
    typecheck + build).

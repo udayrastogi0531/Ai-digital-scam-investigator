@@ -50,6 +50,17 @@ _ALARM_RULE_IDS = {
 }
 
 
+# Precompiled keyword matchers.  RULES is a static module-level dataset and
+# the surrounding boundary regex is fixed, so each keyword is compiled once
+# at import instead of per rule per call (re.compile dominated runtime on
+# large corpora; behavior is identical).
+_KEYWORD_RE: dict[str, re.Pattern] = {
+    kw: re.compile(rf"(?<![a-z0-9]){re.escape(kw)}(?![a-z0-9])")
+    for rule in RULES
+    for kw in rule.keywords
+}
+
+
 def _suppress_alarm_rules(text_signals) -> bool:
     """Whether credential/account alarm rules should be skipped.
 
@@ -86,11 +97,7 @@ def match_rules(
             continue
         if rule.required_entities and not rule.required_entities.intersection(entity_types):
             continue
-        hits = [
-            kw
-            for kw in rule.keywords
-            if re.search(rf"(?<![a-z0-9]){re.escape(kw)}(?![a-z0-9])", lowered)
-        ]
+        hits = [kw for kw in rule.keywords if _KEYWORD_RE[kw].search(lowered)]
         if hits:
             matches.append(RuleMatch(rule=rule, matched_keywords=hits))
     return matches

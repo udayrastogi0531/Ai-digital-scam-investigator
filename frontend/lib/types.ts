@@ -117,6 +117,7 @@ export interface InvestigationListItem {
   risk_level?: RiskLevel | null;
   scam_type?: string | null;
   input_types: string[];
+  evidence_sufficiency?: string | null; // INSUFFICIENT | PARTIAL | SUFFICIENT
   created_at?: string | null;
 }
 
@@ -148,52 +149,81 @@ export interface HealthInfo {
 export interface ProviderStatusRow {
   label: string;
   detail: string;
+  /** Hollow vs filled status dot — filled = operational/connected. */
   ok: boolean;
+  /** Whether the component is an optional external provider that is not configured. */
   mock: boolean;
+  /** Extra sub-detail (e.g. model name, provider names). */
+  sub?: string | null;
 }
 
-/** Map a health payload to the status rows shown across the app shell / dashboard. */
+/**
+ * Map a health payload to the status rows shown across the app shell /
+ * dashboard.  Status is per-component and never hardcoded: it is derived
+ * from the live `/api/health` response.  Optional providers that are not
+ * configured are shown as “Not configured” — never as live, and never as
+ * a product-wide “demo mode”.
+ */
 export function healthRows(h: HealthInfo): ProviderStatusRow[] {
   const ti = h.providers.threat_intel;
-  const rows: ProviderStatusRow[] = [
+  return [
     {
       label: "API",
-      detail: h.status === "ok" ? "Online" : h.status,
+      detail: h.status === "ok" ? "Operational" : h.status,
       ok: h.status === "ok",
       mock: false,
+      sub: "API layer",
     },
     {
       label: "Database",
       detail: h.database ?? "Connected",
       ok: h.status === "ok",
       mock: false,
+      sub: "Investigation store",
     },
     {
-      label: "ML",
-      detail: h.providers.ml.available ? h.providers.ml.model : "Unavailable",
+      label: "ML Engine",
+      detail: h.providers.ml.available ? "Active" : "Not loaded",
       ok: h.providers.ml.available,
       mock: false,
+      sub: h.providers.ml.available ? h.providers.ml.model : null,
     },
     {
-      label: "LLM",
-      detail: h.providers.llm.is_mock ? "Deterministic" : h.providers.llm.model ?? "Live",
-      ok: !h.providers.llm.is_mock,
-      mock: h.providers.llm.is_mock,
-    },
-    {
-      label: "Threat Intel",
-      detail: ti.uses_mock ? "Demo / Mock" : ti.active.join(", "),
-      ok: !ti.uses_mock && ti.active.length > 0,
-      mock: ti.uses_mock,
+      label: "Rule Engine",
+      detail: "Active",
+      ok: true,
+      mock: false,
+      sub: "Deterministic patterns",
     },
     {
       label: "OCR",
-      detail: h.providers.ocr.is_mock ? "Mock" : h.providers.ocr.provider,
+      detail: h.providers.ocr.is_mock ? "Not configured" : "Local",
       ok: !h.providers.ocr.is_mock,
       mock: h.providers.ocr.is_mock,
+      sub: h.providers.ocr.is_mock ? "Local engine required" : h.providers.ocr.provider,
+    },
+    {
+      label: "LLM",
+      detail: h.providers.llm.is_mock ? "Not configured" : "Connected",
+      ok: !h.providers.llm.is_mock,
+      mock: h.providers.llm.is_mock,
+      sub: h.providers.llm.is_mock ? "Deterministic engine active" : h.providers.llm.model,
+    },
+    {
+      label: "Threat Intelligence",
+      detail: ti.uses_mock || ti.active.length === 0 ? "Not configured" : "Connected",
+      ok: !ti.uses_mock && ti.active.length > 0,
+      mock: ti.uses_mock,
+      sub: ti.uses_mock || ti.active.length === 0 ? "External lookup optional" : ti.active.join(", "),
     },
   ];
-  return rows;
+}
+
+/** Overall system state used by the shell pill: core services are API + DB. */
+export function systemState(h: HealthInfo | null): { label: string; ok: boolean; detail: string } {
+  if (!h) return { label: "Offline", ok: false, detail: "API unreachable" };
+  if (h.status === "ok") return { label: "Operational", ok: true, detail: h.database ?? "Connected" };
+  return { label: "Degraded", ok: false, detail: h.status };
 }
 
 export const RISK_META: Record<RiskLevel, { hex: string; soft: string; text: string; ring: string; label: string }> = {

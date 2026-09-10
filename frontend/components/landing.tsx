@@ -305,7 +305,7 @@ const STACK_LAYERS = [
   {
     icon: Radar,
     title: "Threat intelligence",
-    body: "Normalised provider results (Google Safe Browsing, VirusTotal, or demo) merge into evidence.",
+    body: "Normalised provider results (Google Safe Browsing, VirusTotal, or a local provider) merge into evidence.",
   },
   {
     icon: Layers,
@@ -369,7 +369,7 @@ export function LandingPage() {
             </Reveal>
             <Reveal delay={320}>
               <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
-                {["Evidence-based", "Deterministic risk", "AI-assisted", "No paid APIs required for demo mode"].map(
+                {["Evidence-based", "Deterministic risk", "AI-assisted", "No API keys required to start"].map(
                   (t) => (
                     <li key={t} className="flex items-center gap-1.5">
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" aria-hidden /> {t}

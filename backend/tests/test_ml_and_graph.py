@@ -20,8 +20,8 @@ def test_feature_vector_ordered_and_complete():
     assert set(features) == set(FEATURE_NAMES)
     vec = feature_vector(features)
     assert len(vec) == len(FEATURE_NAMES)
-    assert features["url_count"] == 1.0
     assert features["otp_request"] == 1.0
+    assert features["scam_keyword_hits"] > 0.0
     assert 0.0 <= features["uppercase_ratio"] <= 1.0
 
 
@@ -30,11 +30,11 @@ def test_ml_prediction_uses_trained_model():
     assert p.is_mock is False
     assert p.model == "LogisticRegression"
     assert p.label == "scam"
-    assert p.probability_scam > 0.5
+    assert p.probability_scam > 0.55  # above the calibrated decision threshold
 
     q = predict_scam(BENIGN_NOTE)
     assert q.label == "benign"
-    assert q.probability_scam < 0.5
+    assert q.probability_scam < 0.55  # below the calibrated decision threshold
 
 
 @pytest.mark.asyncio

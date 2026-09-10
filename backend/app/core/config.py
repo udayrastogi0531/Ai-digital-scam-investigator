@@ -50,7 +50,11 @@ class Settings(BaseSettings):
 
     # --- ML ---
     ml_model_path: Path = BACKEND_DIR / "app" / "ml" / "models" / "lr_scam_model.joblib"
-    ml_decision_threshold: float = 0.5
+    # Label threshold, chosen on the validation split of the real UCI SMS
+    # corpus (max F1 at 0.55; also fewer false positives than 0.5). The
+    # threshold only affects the reported label — the risk engine consumes
+    # the raw probability as one weighted signal.
+    ml_decision_threshold: float = 0.55
 
     # --- Risk engine ---
     risk_weights_path: Path | None = None  # optional JSON file with custom weights

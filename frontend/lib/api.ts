@@ -33,6 +33,7 @@ export async function listInvestigations(params: {
   search?: string;
   risk_level?: string;
   scam_type?: string;
+  input_type?: string;
 }): Promise<PaginatedInvestigations> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {

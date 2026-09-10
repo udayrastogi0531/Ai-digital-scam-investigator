@@ -55,9 +55,10 @@
   `scripts/evaluate_detection.py`). Current distribution: pattern rules `0.35`, threat intel
   `0.25`, URL `0.18`, requests (credential/OTP `0.12` each, payment `0.10`, suspicious
   instructions `0.08`), ML `0.10`, entity impersonation `0.08`, urgency `0.07`, consistency `0.05`.
-- The synthetic-trained ML model carries the *smallest* deterministic weight on purpose; it was
-  observed over-trusting surface keywords (OTP/password mentions) on benign messages before the
-  request-intent feature fix.
+- The ML model (now trained on the real UCI SMS corpus) carries the *smallest* deterministic
+  weight on purpose: it is one probabilistic signal and never decides the verdict. It was
+  previously observed over-trusting surface keywords (OTP/password mentions) on benign messages
+  before the request-intent feature fix.
 - Request channels are requestive-only: a *mention* of OTP/password/payment never counts as a
   request unless a requestive verb (enter/reply with/send us/…) is present, and protective
   warnings ("never share your OTP") plus reassurance ("no action needed") suppress credential/
@@ -116,8 +117,10 @@ Failure behaviour is a hard invariant:
 
 * `data/datasets/scam_messages.csv` — synthetic/demo training set
   (generated deterministically; origin reported as `synthetic`).
-* `data/datasets/real/` — staging for vetted, permissioned real data
-  (empty by design; schema + policy in `data/datasets/README.md`).
+* `data/datasets/real/sms_spam_uci.csv` — the shipped **real** training corpus
+  (UCI SMS Spam Collection v.1, CC BY 4.0, 5,159 rows; provenance + policy in
+  `data/datasets/README.md`). Training runs with `--no-categories` because the
+  corpus has no scam-category labels.
 * `data/evaluation/evaluation_cases.json` — end-to-end corpus. The loader
   (`app/ml/dataset.py`) refuses to load it as training data and rejects rows
   whose ids overlap evaluation cases, so train/evaluation separation is

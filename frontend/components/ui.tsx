@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AlertTriangle, ScanSearch, ShieldAlert, ShieldCheck, Sparkles } from "lucide-react";
 import type { RiskLevel, Severity } from "@/lib/types";
 import { RISK_COLORS, riskMeta } from "@/lib/types";
@@ -33,12 +34,20 @@ export function SeverityDot({ severity }: { severity: Severity }) {
   return <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${color}`} aria-hidden />;
 }
 
-/** Animated circular risk gauge. */
+/** Animated circular risk gauge — sweeps from 0 to the real score on mount. */
 export function RiskGauge({ score, level, confidence }: { score: number; level: RiskLevel; confidence: number }) {
   const c = RISK_COLORS[level];
   const R = 62;
   const CIRC = 2 * Math.PI * R;
   const filled = Math.max(0, Math.min(100, score)) / 100;
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    // Animate once on mount; reduced-motion users get the final value instantly
+    // (global transition/animation kill switch in globals.css).
+    const raf = requestAnimationFrame(() => setProgress(filled));
+    return () => cancelAnimationFrame(raf);
+  }, [filled]);
 
   return (
     <div className="relative h-44 w-44">
@@ -59,8 +68,8 @@ export function RiskGauge({ score, level, confidence }: { score: number; level: 
           strokeWidth="11"
           strokeLinecap="round"
           strokeDasharray={CIRC}
-          strokeDashoffset={CIRC * (1 - filled)}
-          className="transition-all duration-1000 ease-out"
+          strokeDashoffset={CIRC * (1 - progress)}
+          className="transition-[stroke-dashoffset] duration-1000 ease-out"
           style={{ filter: `drop-shadow(0 0 6px ${c.hex}55)` }}
         />
       </svg>

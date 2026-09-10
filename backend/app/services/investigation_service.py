@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import String, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -358,6 +358,7 @@ async def list_investigations(
     search: str | None = None,
     risk_level: str | None = None,
     scam_type: str | None = None,
+    input_type: str | None = None,
 ) -> PaginatedInvestigations:
     query = select(Investigation)
     if search:
@@ -366,6 +367,12 @@ async def list_investigations(
         query = query.join(RiskAssessment).where(RiskAssessment.level == risk_level.upper())
     if scam_type:
         query = query.join(Report).where(_scam_type_expr(scam_type))
+    if input_type:
+        # input_types is a small controlled-vocabulary JSON list (text/url/image);
+        # match on the serialized text so the filter is portable across SQLite
+        # and PostgreSQL without JSON-dialect gymnastics.
+        needle = f'"{input_type.lower()}"'
+        query = query.where(func.lower(func.cast(Investigation.input_types, String)).like(f"%{needle}%"))
     total = len((await db.execute(query)).scalars().all())
     query = (
         query.order_by(desc(Investigation.created_at))
@@ -382,6 +389,7 @@ async def list_investigations(
             risk_level=inv.risk.level if inv.risk else None,
             scam_type=_primary_type(inv),
             input_types=inv.input_types or [],
+            evidence_sufficiency=(inv.processing_metadata or {}).get("risk_sufficiency"),
             created_at=inv.created_at,
         )
         for inv in rows

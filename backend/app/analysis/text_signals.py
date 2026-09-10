@@ -113,6 +113,12 @@ _SUSPICIOUS_INSTRUCTIONS = [
     "teamviewer", "screen share", "buy gift cards", "scan the qr code",
     "forward to", "share this with", "do not tell anyone", "keep it secret",
     "delete this message", "call this number", "on whatsapp",
+    # crypto payment instructions — instructing a transfer to a wallet/address
+    # (mirrors the gift-card instruction coverage; the pattern engine's
+    # crypto_wallet_drain rule already treats these as critical)
+    "send btc", "send usdt", "send crypto", "send bitcoin", "send ethereum", "send eth",
+    "deposit btc", "deposit crypto", "wallet address", "crypto address",
+    "transfer to wallet", "to a wallet", "to a crypto wallet",
 ]
 
 # --- protective / reassurance context --------------------------------------
@@ -170,13 +176,29 @@ _PHRASE_GROUPS: dict[str, list[str]] = {
 }
 
 
+# Precompiled patterns.  Building these regexes per phrase per call made
+# single-pass analysis ~100ms/message on real corpora (re.compile dominates
+# the runtime); compiling once at import keeps behavior identical while
+# letting the trained pipeline handle thousands of rows in seconds.
+_ALL_PHRASES = frozenset(
+    p
+    for group_ in (
+        _URGENCY, _FEAR_THREAT, _REWARD, _PRESSURE, _AUTHORITY,
+        _PAYMENT_REQUEST, _PAYMENT_MENTION, _CREDENTIAL, _OTP, _SENSITIVE,
+        _SUSPICIOUS_INSTRUCTIONS, _PROTECTIVE, _REASSURANCE,
+    )
+    for p in group_
+)
+_PHRASE_RE: dict[str, re.Pattern] = {
+    phrase: re.compile(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])")
+    for phrase in _ALL_PHRASES
+}
+_REQUESTIVE_RE: list[re.Pattern] = [re.compile(p) for p in _REQUESTIVE_PATTERNS]
+
+
 def _find_phrases(text: str, phrases: list[str]) -> list[str]:
     lowered = text.lower()
-    hits: list[str] = []
-    for phrase in phrases:
-        if re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered):
-            hits.append(phrase)
-    return hits
+    return [phrase for phrase in phrases if _PHRASE_RE[phrase].search(lowered)]
 
 # numeric/length variants that literals cannot express (e.g. "within 12 hours")
 _REGEX_PATTERNS: dict[str, list[str]] = {
@@ -198,12 +220,21 @@ _REGEX_PATTERNS: dict[str, list[str]] = {
         r"(?:pay|send|wire|transfer) (?:us|me|them|the )?\$?\s?\d+",
         r"\$\s?\d+ (?:fee|to (?:start|begin|activate|release|claim|confirm|secure|unlock))",
     ],
+    "instructions": [
+        # "send 0.05 btc", "deposit 2 eth", "transfer 1 bitcoin" — a request to
+        # move a crypto amount is an instruction to transfer value.
+        r"\b(?:send|deposit|transfer) (?:us |me |them |the )?[\d.]+ ?(?:btc|usdt|eth|bitcoin|ethereum|crypto)\b",
+    ],
+}
+
+_REGEX_RE: dict[str, list[re.Pattern]] = {
+    name: [re.compile(p) for p in patterns] for name, patterns in _REGEX_PATTERNS.items()
 }
 
 
-def _find_regex(text: str, patterns: list[str]) -> list[str]:
+def _find_regex(text: str, name: str) -> list[str]:
     lowered = text.lower()
-    return [p for p in patterns if re.search(p, lowered)]
+    return [p.pattern for p in _REGEX_RE.get(name, []) if p.search(lowered)]
 
 
 def _score(hits: list[str]) -> float:
@@ -214,8 +245,8 @@ def _score(hits: list[str]) -> float:
 def _has_requestive(text: str) -> bool:
     """True when a non-negated requestive verb is present."""
     lowered = text.lower()
-    for pattern in _REQUESTIVE_PATTERNS:
-        for match in re.finditer(pattern, lowered):
+    for pattern in _REQUESTIVE_RE:
+        for match in pattern.finditer(lowered):
             before = lowered[max(0, match.start() - 24): match.start()]
             if _NEGATION_BEFORE.search(before):
                 continue  # "never share your OTP" is advice, not a request
@@ -230,7 +261,7 @@ def analyze_text_signals(raw_text: str | None) -> TextSignals:
 
     def group(name: str, phrases: list[str]) -> list[str]:
         hits = _find_phrases(text, phrases)
-        hits.extend(p for p in _find_regex(text, _REGEX_PATTERNS.get(name, [])) if p not in hits)
+        hits.extend(p for p in _find_regex(text, name) if p not in hits)
         return hits
 
     urgency = group("urgency", _URGENCY)

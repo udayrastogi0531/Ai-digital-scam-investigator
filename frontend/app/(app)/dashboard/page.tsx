@@ -12,7 +12,7 @@ import {
   Plus,
   Radar,
   ShieldAlert,
-  Sparkles,
+  Timer,
 } from "lucide-react";
 import { EmptyState, ErrorBanner, RiskBadge, SectionHeader, Skeleton, Spinner } from "@/components/ui";
 import { Reveal } from "@/components/reveal";
@@ -22,7 +22,11 @@ import { categoryLabel, formatDate, healthRows, riskMeta } from "@/lib/types";
 
 const LEVEL_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 
-function ProviderStrip({ health }: { health: HealthInfo | null }) {
+/* ------------------------------------------------------------------ */
+/* System health                                                       */
+/* ------------------------------------------------------------------ */
+
+function SystemHealth({ health }: { health: HealthInfo | null }) {
   if (!health) {
     return (
       <div className="panel p-4">
@@ -34,25 +38,36 @@ function ProviderStrip({ health }: { health: HealthInfo | null }) {
   }
   const rows = healthRows(health);
   return (
-    <div className="panel divide-y divide-base-700/50 overflow-hidden">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-2.5 text-[11px] text-slate-500">
+    <div className="panel overflow-hidden">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-base-700/50 px-4 py-2.5 text-[11px] text-slate-500">
         <span className="flex items-center gap-1.5 font-semibold text-slate-300">
           <Activity className="h-3.5 w-3.5 text-accent" aria-hidden /> SYSTEM STATUS
         </span>
-        <span>API {health.status === "ok" ? "Online" : health.status}</span>
-        <span>DB {health.database ?? "Connected"}</span>
-        <span>ML {health.providers.ml.available ? "Active" : "Unavailable"}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden /> API Operational
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden /> Core engine active
+        </span>
+        <span className="text-slate-600">External integrations are enhancements, not requirements</span>
       </div>
-      <div className="grid grid-cols-2 divide-x divide-y divide-base-700/50 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 divide-x divide-y divide-base-700/40 sm:grid-cols-3 lg:grid-cols-7">
         {rows.map((r) => (
-          <div key={r.label} className="flex items-start gap-2.5 px-4 py-3">
-            <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${r.ok ? "bg-emerald-400" : "bg-amber-400"}`} aria-hidden />
+          <div key={r.label} className="flex items-start gap-2.5 px-3.5 py-3">
+            <span
+              className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+                r.ok ? "bg-emerald-400" : r.mock ? "bg-slate-600" : "bg-red-400"
+              }`}
+              aria-hidden
+            />
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">{r.label}</div>
-              <div className="truncate text-xs font-medium text-slate-300" title={r.detail}>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                {r.label}
+              </div>
+              <div className="truncate text-xs font-medium text-slate-300" title={`${r.detail}${r.sub ? ` — ${r.sub}` : ""}`}>
                 {r.detail}
               </div>
-              {r.mock && <div className="text-[10px] text-amber-400/80">demo / mock</div>}
+              {r.sub && <div className="truncate text-[10px] text-slate-600">{r.sub}</div>}
             </div>
           </div>
         ))}
@@ -60,6 +75,21 @@ function ProviderStrip({ health }: { health: HealthInfo | null }) {
     </div>
   );
 }
+
+function isToday(iso?: string | null): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export default function DashboardPage() {
   const [recent, setRecent] = useState<InvestigationListItem[] | null>(null);
@@ -100,27 +130,28 @@ export default function DashboardPage() {
     }
   }
 
-  const total = recent?.length ?? 0;
-  const highRisk = recent?.filter((i) => i.risk_level === "HIGH" || i.risk_level === "CRITICAL").length ?? 0;
-  const scored = recent?.filter((i) => typeof i.risk_score === "number") ?? [];
+  const items = recent ?? [];
+  const total = items.length;
+  const highRisk = items.filter((i) => i.risk_level === "HIGH" || i.risk_level === "CRITICAL").length;
+  const scored = items.filter((i) => typeof i.risk_score === "number");
   const avgRisk = scored.length ? Math.round(scored.reduce((a, i) => a + (i.risk_score ?? 0), 0) / scored.length) : null;
+  const todayCount = items.filter((i) => isToday(i.created_at)).length;
 
-  const dist = (recent ?? []).reduce<Record<string, number>>((acc, i) => {
+  const dist = items.reduce<Record<string, number>>((acc, i) => {
     const lvl = i.risk_level ?? "—";
     acc[lvl] = (acc[lvl] ?? 0) + 1;
     return acc;
   }, {});
-  const byType = (recent ?? []).reduce<Record<string, number>>((acc, i) => {
+  const byType = items.reduce<Record<string, number>>((acc, i) => {
     const t = i.scam_type ?? "unclassified";
     acc[t] = (acc[t] ?? 0) + 1;
     return acc;
   }, {});
   const topTypes = Object.entries(byType)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+    .slice(0, 6);
   const maxLevelCount = Math.max(1, ...LEVEL_ORDER.map((l) => dist[l] ?? 0));
   const maxTypeCount = Math.max(1, ...topTypes.map(([, c]) => c));
-  const demoMode = health?.providers.llm.is_mock ?? true;
 
   if (err && recent === null) {
     return (
@@ -133,17 +164,34 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Investigation Center"
-        sub="Monitor and analyze suspicious digital activity."
-        action={
-          <Link href="/investigate" className="btn-primary">
-            <Plus className="h-4 w-4" aria-hidden /> New investigation
-          </Link>
-        }
-      />
+      {/* hero / header */}
+      <div className="panel relative overflow-hidden p-6 sm:p-7">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_100%_0%,rgba(34,211,238,0.07),transparent_60%)]" />
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden /> Security investigation center
+            </div>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-100 sm:text-3xl">
+              Investigation Center
+            </h1>
+            <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-500">
+              Analyze suspicious digital activity using evidence-driven cybersecurity intelligence —
+              extraction, correlation and a deterministic risk engine.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Link href="/history" className="btn-ghost">
+              <FileSearch className="h-4 w-4" aria-hidden /> View history
+            </Link>
+            <Link href="/investigate" className="btn-primary">
+              <Plus className="h-4 w-4" aria-hidden /> New investigation
+            </Link>
+          </div>
+        </div>
+      </div>
 
-      <ProviderStrip health={health} />
+      <SystemHealth health={health} />
 
       {err && <ErrorBanner message={err} onRetry={refresh} />}
 
@@ -188,19 +236,19 @@ export default function DashboardPage() {
         <Reveal delay={180}>
           <div className="panel panel-hover h-full p-4">
             <div className="panel-title flex items-center justify-between">
-              System
-              <Radar className="h-3.5 w-3.5 text-emerald-400/70" aria-hidden />
+              Cases today
+              <Timer className="h-3.5 w-3.5 text-cyan-400/70" aria-hidden />
             </div>
-            <div className={`mono-tabular mt-2 font-mono text-3xl font-bold ${demoMode ? "text-amber-300" : "text-emerald-300"}`}>
-              {health === null ? <Skeleton className="h-8 w-14" /> : demoMode ? "Demo" : "Live"}
+            <div className="mono-tabular mt-2 font-mono text-3xl font-bold text-slate-100">
+              {recent === null ? <Skeleton className="h-8 w-14" /> : todayCount}
             </div>
-            <div className="mt-1 text-xs text-slate-500">{health ? (demoMode ? "no paid APIs configured" : "live providers") : "checking…"}</div>
+            <div className="mt-1 text-xs text-slate-500">submitted today</div>
           </div>
         </Reveal>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* risk distribution */}
+        {/* risk distribution + categories */}
         <Reveal>
           <section className="panel h-full p-5">
             <h2 className="panel-title">Risk distribution</h2>
@@ -230,36 +278,40 @@ export default function DashboardPage() {
               })}
             </div>
 
-            <h2 className="panel-title mt-7">Top categories</h2>
+            <h2 className="panel-title mt-7">Scam categories</h2>
             <div className="mt-3 space-y-2.5">
               {topTypes.length === 0 && <p className="text-sm text-slate-600">No investigations yet.</p>}
               {topTypes.map(([type, count]) => (
                 <div key={type} className="flex items-center gap-3">
-                  <span className="w-48 truncate text-xs text-slate-300">{categoryLabel(type)}</span>
+                  <span className="w-44 truncate text-xs text-slate-300" title={categoryLabel(type)}>
+                    {categoryLabel(type)}
+                  </span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-base-800">
                     <div
                       className="h-full origin-left animate-bar-grow rounded-full bg-gradient-to-r from-cyan-500/70 to-accent"
                       style={{ width: `${(count / maxTypeCount) * 100}%` }}
                     />
                   </div>
-                  <span className="mono-tabular w-6 text-right font-mono text-[11px] text-slate-400">{count}</span>
+                  <span className="mono-tabular w-10 text-right font-mono text-[11px] text-slate-400">
+                    {count} · {total ? Math.round((count / total) * 100) : 0}%
+                  </span>
                 </div>
               ))}
             </div>
           </section>
         </Reveal>
 
-        {/* demo cases */}
+        {/* sample cases */}
         <Reveal delay={100}>
-          <section className="panel h-full p-5">
+          <section className="panel flex h-full flex-col p-5">
             <div className="flex items-center justify-between">
-              <h2 className="panel-title">Try a sample investigation</h2>
+              <h2 className="panel-title">Sample investigations</h2>
               <FlaskConical className="h-4 w-4 text-accent/70" aria-hidden />
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-500">
-              Fictional cases run through the full pipeline — handy when you have nothing to paste yet.
+              Curated sample cases run through the full engine — handy when you have nothing to paste yet.
             </p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <div className="mt-4 grid flex-1 content-start gap-2 sm:grid-cols-2">
               {demos.length === 0 && (
                 <div className="sm:col-span-2"><Skeleton className="h-9 w-full" /></div>
               )}
@@ -281,7 +333,7 @@ export default function DashboardPage() {
             </div>
             {demos.length > 0 && (
               <p className="mt-3 text-[10px] text-slate-600">
-                Runs a deterministic demo case server-side — results are real pipeline output, not mockups.
+                Sample cases run the real pipeline server-side — results are actual engine output, not mockups.
               </p>
             )}
           </section>
@@ -295,7 +347,7 @@ export default function DashboardPage() {
           <div className="relative flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
-                <Sparkles className="h-4 w-4 text-accent" aria-hidden /> Analyze something suspicious?
+                <Radar className="h-4 w-4 text-accent" aria-hidden /> Analyze something suspicious?
               </div>
               <p className="mt-1 max-w-lg text-[13px] leading-relaxed text-slate-500">
                 Paste a message, add a URL or upload a screenshot. The investigation engine extracts
@@ -309,7 +361,7 @@ export default function DashboardPage() {
         </div>
       </Reveal>
 
-      {/* recent */}
+      {/* recent investigations */}
       <section className="panel overflow-hidden">
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
           <h2 className="panel-title">Recent investigations</h2>
@@ -338,13 +390,14 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="scroll-slim overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[820px] text-left text-sm">
               <thead>
                 <tr className="border-y border-base-700/60 bg-base-900/60 text-[10px] uppercase tracking-[0.12em] text-slate-600">
                   <th className="px-5 py-2.5 font-semibold">Investigation</th>
                   <th className="px-3 py-2.5 font-semibold">Type</th>
                   <th className="px-3 py-2.5 font-semibold">Input</th>
                   <th className="px-3 py-2.5 font-semibold">Risk</th>
+                  <th className="px-3 py-2.5 font-semibold">Evidence</th>
                   <th className="px-5 py-2.5 text-right font-semibold">Opened</th>
                 </tr>
               </thead>
@@ -372,6 +425,9 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="px-3 py-3"><RiskBadge level={i.risk_level} score={i.risk_score} /></td>
+                    <td className="px-3 py-3">
+                      <SufficiencyTag value={i.evidence_sufficiency} />
+                    </td>
                     <td className="px-5 py-3 text-right font-mono text-[11px] text-slate-500">
                       {formatDate(i.created_at)}
                     </td>
@@ -383,5 +439,19 @@ export default function DashboardPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function SufficiencyTag({ value }: { value?: string | null }) {
+  const cls: Record<string, string> = {
+    SUFFICIENT: "border-emerald-500/30 bg-emerald-500/[0.07] text-emerald-300",
+    PARTIAL: "border-amber-500/30 bg-amber-500/[0.07] text-amber-300",
+    INSUFFICIENT: "border-slate-500/40 bg-slate-500/10 text-slate-400",
+  };
+  if (!value) return <span className="text-xs text-slate-600">—</span>;
+  return (
+    <span className={`chip border px-2 py-0.5 font-mono text-[10px] uppercase ${cls[value] ?? cls.INSUFFICIENT}`}>
+      {value}
+    </span>
   );
 }

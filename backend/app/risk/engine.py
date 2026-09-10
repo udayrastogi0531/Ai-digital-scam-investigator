@@ -46,10 +46,11 @@ logger = logging.getLogger("scaminvestigator.risk")
 
 DEFAULT_WEIGHTS: dict[str, float] = {
     # Pattern rules are hand-vetted and the most precise deterministic
-    # channel.  The bundled ML model is trained on a synthetic corpus and
-    # has shown it over-trusts surface keywords on benign messages, so it
+    # channel.  The bundled ML model is trained on the UCI SMS Spam
+    # Collection (real, CC BY 4.0 — see data/datasets/README.md) and
     # deliberately carries the smallest weight of the deterministic
-    # channels.  ``suspicious_instructions`` (remote access, gift-card
+    # channels: it is one probabilistic signal and never decides the
+    # verdict.  ``suspicious_instructions`` (remote access, gift-card
     # purchases, disabling security) is a high-precision request channel.
     "ml_score": 0.10,
     "url_risk": 0.18,
@@ -258,7 +259,7 @@ def _contributors(components: dict[str, float], inputs: RiskInputs) -> list[Risk
         "credential_request": "Credential request",
         "otp_request": "OTP request",
         "sensitive_info": "Sensitive-information request",
-        "suspicious_instructions": "Suspicious instructions (remote access / gift cards)",
+        "suspicious_instructions": "Suspicious instructions (remote access / gift cards / crypto transfers)",
     }
     out: list[RiskContributor] = []
     for key, label in labels.items():

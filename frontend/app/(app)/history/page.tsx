@@ -9,6 +9,7 @@ import type { PaginatedInvestigations } from "@/lib/types";
 import { categoryLabel, formatDay } from "@/lib/types";
 
 const RISK_FILTERS = ["", "LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const INPUT_FILTERS = ["", "text", "url", "image"];
 const PAGE_SIZE = 15;
 
 export default function HistoryPage() {
@@ -16,6 +17,7 @@ export default function HistoryPage() {
   const [search, setSearch] = useState("");
   const [risk, setRisk] = useState("");
   const [type, setType] = useState("");
+  const [input, setInput] = useState("");
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,12 +30,13 @@ export default function HistoryPage() {
         search: search || undefined,
         risk_level: risk || undefined,
         scam_type: type || undefined,
+        input_type: input || undefined,
       });
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [search, risk, type, page]);
+  }, [search, risk, type, input, page]);
 
   useEffect(() => {
     load();
@@ -65,7 +68,7 @@ export default function HistoryPage() {
       />
 
       {/* filters */}
-      <div className="panel grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="panel grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="sm:col-span-2">
           <label htmlFor="search" className="field-label">Search</label>
           <div className="relative">
@@ -113,6 +116,24 @@ export default function HistoryPage() {
             }}
           />
         </div>
+        <div>
+          <label htmlFor="input-filter" className="field-label">Input type</label>
+          <select
+            id="input-filter"
+            className="input"
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setPage(1);
+            }}
+          >
+            {INPUT_FILTERS.map((t) => (
+              <option key={t} value={t}>
+                {t === "" ? "All inputs" : t.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && <ErrorBanner message={error} onRetry={load} />}
@@ -126,14 +147,14 @@ export default function HistoryPage() {
       ) : data.items.length === 0 ? (
         <EmptyState
           icon={<Archive className="h-6 w-6" aria-hidden />}
-          title={search || risk || type ? "No investigations match" : "No investigations yet"}
+          title={search || risk || type || input ? "No investigations match" : "No investigations yet"}
           hint={
-            search || risk || type
+            search || risk || type || input
               ? "Adjust the search or filters, or clear them to see everything."
               : "Start your first investigation to analyze a suspicious message, URL or screenshot."
           }
           action={
-            !(search || risk || type) ? (
+            !(search || risk || type || input) ? (
               <Link href="/investigate" className="btn-primary">
                 <Plus className="h-4 w-4" aria-hidden /> Start investigation
               </Link>
