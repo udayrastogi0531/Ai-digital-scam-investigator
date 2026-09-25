@@ -42,6 +42,12 @@ def setup_logging() -> None:
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(logging.DEBUG if settings.debug else logging.INFO)
+    # Never let third-party HTTP clients log request URLs.  A URL can carry a
+    # credential (an API key in a query parameter) and always carries the
+    # user-submitted link; both must stay out of the log stream.  Their
+    # warnings/errors still surface.
+    for noisy in ("httpx", "httpcore", "urllib3", "asyncio"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     _configured = True
 
 

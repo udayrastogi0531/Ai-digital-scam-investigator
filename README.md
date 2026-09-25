@@ -56,6 +56,9 @@ explainable, audit-friendly investigation report.
 - [Usage](#usage)
 - [Demo Mode](#demo-mode)
 - [Production Providers](#production-providers)
+- [Live integration status](#live-integration-status)
+- [Live end-to-end acceptance run](#live-end-to-end-acceptance-run)
+- [Deployment](#deployment)
 - [Project Structure](#project-structure)
 - [Limitations](#limitations)
 - [Roadmap](#roadmap)
@@ -332,8 +335,15 @@ shows **"Why this was flagged"** from the high/critical severity signals.
 | Provider | Mode | Notes |
 |---|---|---|
 | `MockThreatIntelProvider` | **Demo (default)** | Deterministic, clearly labeled `[DEMO]`; a fictional blocklist; never double-counts URL structural evidence |
-| Google Safe Browsing | Live (opt-in) | `GOOGLE_SAFE_BROWSING_API_KEY` |
-| VirusTotal | Live (opt-in) | `VIRUSTOTAL_API_KEY` |
+| Google Safe Browsing | Live (opt-in) | `GOOGLE_SAFE_BROWSING_API_KEY`, sent in the `x-goog-api-key` **header** — never in the URL, so the credential cannot leak into access logs |
+| VirusTotal | Live (opt-in) | `VIRUSTOTAL_API_KEY`, sent in the `x-apikey` header |
+
+**Input validation (hard invariant):** a provider only answers for a well-formed absolute
+`http(s)` URL with a real hostname or IP literal (`app/intelligence/base.py::lookupable_url`).
+Malformed input — spaces, a bare label, no scheme, an unparseable IPv6 literal — returns
+`verdict=unknown` with `status=error` **without any API call**, because "not in the blocklist"
+is the answer *every* reputation service gives for a string it cannot check, and reporting that
+as clean would silently lower risk.
 
 All providers normalize at the boundary into `ThreatIntelResult`:
 `provider`, `verdict` (`safe|suspicious|malicious|unknown`), `status`
@@ -382,7 +392,8 @@ Linguistic rule engines over the normalized text:
 
 `OCR_PROVIDER=auto` (default) detects a local `tesseract` binary at startup:
 
-- **Tesseract available** → real OCR of uploaded screenshots (`pytesseract`).
+- **Tesseract available** → real OCR of uploaded screenshots via the system `tesseract` binary
+  (invoked as a subprocess; no Python wrapper dependency).
 - **Not available** → a deterministic mock OCR provider that emits a clear warning; the
   investigation still completes.
 
@@ -499,12 +510,23 @@ category + band metrics.
 
 | Suite | Command | Result |
 |---|---|---|
-| Backend unit/integration | `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` | 162 passed, 4 opt-in live tests skipped without credentials |
+| Backend unit/integration | `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` | **165 passed**, 11 skipped (opt-in live suites) |
+| Live threat-intel / LLM (opt-in) | `RUN_LIVE_INTEL_TESTS=1` / `RUN_LIVE_LLM_TESTS=1` | requires real API keys |
+| Live OCR (opt-in) | `RUN_LIVE_OCR_TESTS=1 … -m pytest tests/test_ocr_live.py -q` | **7 passed** with a system Tesseract |
 | Evaluation harness | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64-case corpus |
 | E2E smoke | `.venv/Scripts/python.exe scripts/end_to_end_smoke.py` | 12/12 flows |
 | Frontend typecheck | `cd frontend && npm run typecheck` | PASS |
 | Frontend build | `npm run build` | PASS |
-| Live integrations (opt-in) | `RUN_LIVE_INTEL_TESTS=1` / `RUN_LIVE_LLM_TESTS=1` | only with real API keys |
+
+**The offline suites are hermetic.** `tests/conftest.py` pins every provider to its deterministic
+mock implementation, so a developer's local `backend/.env` with real keys can *never* turn `pytest`
+into a live-network run or shift the calibration assertions. `scripts/evaluate_detection.py` blanks
+the provider keys for the same reason. Only the explicitly opt-in `RUN_LIVE_*` suites use the
+network.
+
+`npm run lint` is **not** a usable gate in this repository: `next lint` opens an interactive prompt
+to configure ESLint (no config file or ESLint dependency is committed). `typecheck` and `build` are
+the enforced frontend checks; lint configuration was deliberately not added just to report a pass.
 
 ---
 
@@ -572,14 +594,18 @@ All settings are environment variables (see `backend/app/core/config.py` and `.e
 | `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | — / — / `gpt-4o-mini` | Live LLM |
 | `GOOGLE_SAFE_BROWSING_API_KEY` | — | Live Safe Browsing |
 | `VIRUSTOTAL_API_KEY` | — | Live VirusTotal |
+| `LLM_TIMEOUT_SECONDS` | `45` | LLM request timeout |
 | `THREAT_INTEL_TIMEOUT_SECONDS` | `10` | Provider timeout |
 | `OCR_PROVIDER` | `auto` | `auto` \| `tesseract` \| `mock` |
 | `TESSERACT_BINARY` | `tesseract` | OCR binary name |
+| `OCR_MAX_IMAGE_MB` | `10` | OCR image cap |
 | `MAX_UPLOAD_MB` / `MAX_TEXT_LENGTH` / `MAX_URLS_PER_SUBMISSION` | `10` / `50000` / `20` | Input limits |
 | `RATE_LIMIT_PER_MINUTE` | `30` | API rate limit |
+| `CORS_ORIGINS` | `http://localhost:3000` | Allowed browser origins |
 | `RISK_WEIGHTS_PATH` | — | Optional JSON weight overrides |
 | `ML_MODEL_PATH` | shipped `.joblib` | Classifier artifact |
-| `RUN_LIVE_INTEL_TESTS` / `RUN_LIVE_LLM_TESTS` | — | Opt-in live tests (never in CI) |
+| `ML_DECISION_THRESHOLD` | `0.55` | Model label threshold (validated on the UCI validation split) |
+| `RUN_LIVE_INTEL_TESTS` / `RUN_LIVE_LLM_TESTS` / `RUN_LIVE_OCR_TESTS` | — | Opt-in live tests (never in CI) |
 
 ---
 
@@ -638,6 +664,79 @@ Live tests: `RUN_LIVE_INTEL_TESTS=1` and/or `RUN_LIVE_LLM_TESTS=1` with `pytest`
 
 ---
 
+## Live integration status
+
+What was **actually executed** against real providers (not inferred from configuration). Every
+row below is reproducible with the commands in [Testing](#testing).
+
+| Integration | Status | Evidence |
+|---|---|---|
+| Google Safe Browsing | **CONNECTED** | Live `threatMatches:find` calls succeed. Benign `https://example.com/` → `safe` / `ok`. Google's own documented v4 fixtures (`testsafebrowsing.appspot.com/apiv4/ANY_PLATFORM/{MALWARE,SOCIAL_ENGINEERING}/URL/`) → `malicious` / `ok` with the expected category preserved. Invalid key → `unknown` / `error` (HTTP 400). Malformed input → `unknown` / `error` with **no** HTTP call. |
+| VirusTotal | **CONNECTED** | Live `/urls/{id}` lookups succeed. `https://example.com/` and `https://www.wikipedia.org/` → `safe` / `ok`, 0 hits. Unseen URL → `unknown` (HTTP 404, "not seen", *not* clean). Invalid key → `unknown` / `error` (HTTP 401). Public lookups spaced to respect the rate limit; a 429 maps to `rate_limited`. |
+| Gemini / LLM | **CONNECTED** | `LLM_PROVIDER=openai_compatible` against Gemini's OpenAI-compatible endpoint. Live explanation, report and classification refinement returned grounded, non-mock output that referenced only evidence present in the context (no invented URLs, brands, organizations or amounts). A provider failure (HTTP 404/503) falls back to the deterministic explanation/report — the investigation still completes. |
+| Tesseract OCR | **CONNECTED** | `tesseract v5.5.3.20260724` discovered without an absolute path. A generated phishing screenshot uploaded to `POST /api/analyze/image` extracted 32 words, the embedded URL was analyzed, and the case scored **HIGH 59.4**; a benign notification screenshot scored **LOW 1.8**. A blank/unreadable image returns empty text + an explicit error rather than fabricated text. |
+| SQLite (local) | **VERIFIED** | Create / retrieve / history / filters / pagination / delete exercised over HTTP; missing and malformed ids return 404. |
+| PostgreSQL | **NOT CONFIGURED / NOT REQUIRED FOR LOCAL** | The server is not installed here; SQLite is the documented local store. `DATABASE_URL` + `docker-compose.yml` carry the PostgreSQL path. |
+| Docker | **NOT VERIFIED** | The Docker CLI is not installed in this environment, so `docker compose config/build/up` were not run. The Dockerfiles and compose file are unchanged. |
+
+**Provider/model note.** Google has closed `gemini-2.5-flash` to new API keys and returned 503
+(overloaded) for several `*-flash` tiers during verification, so a lighter tier
+(`gemini-3.5-flash-lite`) is configured. Any OpenAI-compatible endpoint works — the model is a
+single environment variable and is never hardcoded.
+
+---
+
+## Live end-to-end acceptance run
+
+Ten scenarios submitted through the **running application's own HTTP API** (`POST
+/api/investigations`) with live Google Safe Browsing, live VirusTotal, live Gemini and real
+Tesseract OCR active — no layer bypassed, no expected score hardcoded. Observed outcomes:
+
+| # | Scenario | Risk | Score | Classified as | Evidence sufficiency |
+|---|---|---|---|---|---|
+| 1 | Bank account suspension phishing | MEDIUM | 38.0 | `banking_scam` | SUFFICIENT |
+| 2 | Fake job + advance payment | MEDIUM | 46.6 | `job_scam` | SUFFICIENT |
+| 3 | Fake delivery + payment request | MEDIUM | 37.9 | `delivery_scam` | SUFFICIENT |
+| 4 | Crypto/investment "guaranteed returns" | LOW | 9.2 | `crypto_scam` | PARTIAL |
+| 5 | CEO/executive impersonation + gift cards | MEDIUM | 28.2 | `impersonation_scam` | SUFFICIENT |
+| 6 | Lookalike URL only | **HIGH** | 64.2 | `phishing` | SUFFICIENT |
+| 7 | Legitimate OTP message | LOW | 5.7 | `unknown` | INSUFFICIENT |
+| 8 | Legitimate receipt | LOW | 17.7 | `delivery_scam` (label only) | PARTIAL |
+| 9 | Sparse message ("Check this.") | LOW | 0.1 | `unknown` | INSUFFICIENT |
+| 10 | Suspicious text + lookalike URL | **HIGH** | 67.8 | `banking_scam` | SUFFICIENT |
+
+Every case completed (`status=completed`), the LLM explanation was live and grounded, and threat
+intelligence reported real per-provider outcomes (Safe Browsing `safe`/`ok`, VirusTotal
+`unknown`/`ok` for the RFC-2606/`.example` fixtures used — never a fabricated detection).
+
+**Two honest observations from this run (also listed under [Limitations](#limitations)):**
+
+- **Case 4 is a calibration gap.** "Guaranteed 40% returns in 7 days… double your investment
+  risk-free" is correctly *classified* as `crypto_scam` (via LLM refinement of an ambiguous rule
+  result) but scores **LOW 9.2**, because the deterministic rule engine's literal keyword matcher
+  misses the phrasings in that sentence (`guaranteed 40% returns` has a token between the two
+  keywords; `risk-free` is hyphenated where the rule has `risk free`). Rules, not the LLM, drive
+  the risk channels, so the pattern channel stayed empty. Closing this requires generalising the
+  keyword matcher, which also feeds the model's `scam_keyword_hits` feature and would therefore
+  require retraining and re-validating the tracked artifact — deliberately not done here.
+- **Case 8's category label is imprecise.** A legitimate receipt mentioning "parcel" is labelled
+  `delivery_scam` (rule confidence 0.6) while the risk band correctly stays **LOW**. The band is
+  what gates the user-facing verdict; the label is advisory.
+
+---
+
+## Deployment
+
+Full instructions — Vercel (frontend), Railway/Render or any container host (backend), managed
+PostgreSQL, provider keys, CORS, health check, post-deploy smoke test and troubleshooting — are in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+The short version: the frontend needs only `BACKEND_URL`; the backend needs `DATABASE_URL`, the
+provider keys and the LLM settings; API keys are server-side only and must never be exposed to the
+browser.
+
+---
+
 ## Project Structure
 
 ```text
@@ -661,9 +760,8 @@ backend/
     evaluation/      evaluation_cases.json (tracked)
   scripts/
     evaluate_detection.py   64-case calibration harness
-    end_to_end_smoke.py     12-flow E2E smoke
-    ml_training/            train + evaluate + generate_dataset
-  tests/             pytest suites
+    end_to_end_smoke.py     12-flow E2E smoke    ml_training/            train + evaluate + generate_dataset
+  tests/             pytest suites (incl. opt-in live OCR/threat-intel/LLM integration tests) (offline suite is hermetic; live suites are opt-in)
 frontend/
   app/               routes: /, /dashboard, /investigate, /history, /results/[id]
   components/        shell, landing, evidence, UI primitives
@@ -684,10 +782,20 @@ Honest, current constraints:
   detection metrics** (F1 0.987 on the 64-case fictional corpus) measure the *whole pipeline*.
   The two must never be combined — see [AI / ML Architecture](#ai--ml-architecture) and
   [Evaluation](#evaluation).
-- **No live integration was executed without credentials** — Safe Browsing, VirusTotal, LLM and
-  Tesseract OCR are verified via offline/fallback paths and opt-in live tests.
+- **Live integrations were verified against real providers** — see
+  [Live integration status](#live-integration-status) for what was actually executed, and which
+  checks still require a credential or a host capability this environment did not have.
 - **One documented false negative** remains in the corpus (subtle doc-link social engineering).
 - **Text rules are English-centric.**
+- **Rule-keyword matching is literal.** A phrase split by another token (`guaranteed 40%
+  returns`) or hyphenated differently (`risk-free` vs the rule's `risk free`) will not match,
+  which can leave an obvious investment scam at a LOW band while the LLM still names the correct
+  category. Because the rule matcher also produces the model's `scam_keyword_hits` feature,
+  generalising it is a retrain-and-revalidate change, not a one-line patch.
+- **Scam-type labels can be imprecise on benign look-alikes** (e.g. a genuine receipt mentioning
+  "parcel" is labelled a delivery scam) even when the risk band correctly stays LOW. The band,
+  not the label, gates the verdict.
+- **Docker configuration is unverified in this environment** (no Docker CLI); it was not modified.
 - The system is **decision support** — it produces probabilistic, evidence-based assessments,
   never guarantees.
 

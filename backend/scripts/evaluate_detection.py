@@ -56,6 +56,14 @@ def _env_setup() -> None:
     os.environ["OCR_PROVIDER"] = "mock"
     os.environ["LLM_PROVIDER"] = "mock"
     os.environ["RATE_LIMIT_PER_MINUTE"] = "100000"
+    # Blank the provider keys so the reported metrics come from the
+    # deterministic mock providers even on a developer machine whose
+    # ``backend/.env`` holds real keys.  Without this the harness silently
+    # called live public APIs for every corpus URL (rate limits, network
+    # flakiness) while its own docstring claimed mock intel was used.
+    os.environ["GOOGLE_SAFE_BROWSING_API_KEY"] = ""
+    os.environ["VIRUSTOTAL_API_KEY"] = ""
+    os.environ["LLM_API_KEY"] = ""
     model = BACKEND_DIR / "app" / "ml" / "models" / "lr_scam_model.joblib"
     if model.exists():
         os.environ.setdefault("ML_MODEL_PATH", str(model))

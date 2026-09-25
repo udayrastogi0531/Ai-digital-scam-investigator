@@ -24,6 +24,14 @@ body {
   color: #f0fdff;
 }
 
+/* The design-system classes live in Tailwind's `components` layer so that
+   utility classes written in JSX (e.g. `pl-9` next to `input` for an icon
+   inside a field) always win the cascade.  Previously they were plain rules
+   emitted after `@tailwind utilities`, so a utility like `pl-9` was silently
+   overridden by the component's own padding and the field's placeholder
+   rendered underneath its icon. */
+@layer components {
+
 /* ---------- reusable surfaces ---------- */
 
 .panel {
@@ -123,6 +131,8 @@ body {
   background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.09), transparent);
   background-size: 400px 100%;
 }
+
+} /* end @layer components */
 
 /* ---------- misc ---------- */
 

@@ -196,14 +196,21 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
 
   const risk = inv.risk;
 
-  // Honest provider notice: appears only when mock/local providers actually
-  // produced evidence — never presented as a product-wide “demo mode”.
-  const localProviders = inv.evidence.some(
+  // Honest provider notice: shown only when a provider actually ran in
+  // local/demo mode for THIS report.  It must never appear merely because a
+  // component took part — a report produced with live Google Safe Browsing /
+  // VirusTotal / LLM credentials must not claim "no external API is
+  // configured".  The mock flags on the evidence are the source of truth.
+  const mockOcr = inv.evidence.some((e) => e.signal === "ocr_mock");
+  const mockIntel = inv.evidence.some(
     (e) =>
-      e.source === "threat_intelligence" ||
-      e.source === "ocr" ||
-      (e.detail && (e.detail as Record<string, unknown>).is_mock === true) ||
-      (e.description ?? "").includes("[DEMO]")
+      e.source === "threat_intelligence" &&
+      ((e.detail as Record<string, unknown> | undefined)?.is_mock === true ||
+        (e.description ?? "").includes("[DEMO]"))
+  );
+  const localProviders = mockOcr || mockIntel;
+  const localParts = [mockOcr && "OCR", mockIntel && "threat intelligence"].filter(
+    (part): part is string => Boolean(part)
   );
 
   const flagged = inv.evidence.filter((e) => e.severity === "high" || e.severity === "critical").slice(0, 10);
@@ -246,9 +253,11 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-base-600/50 bg-base-900/60 px-4 py-2.5 text-xs text-slate-400">
           <ShieldQuestion className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
           <span>
-            This report used the built-in local OCR / threat-intelligence providers — no external
-            API is configured. Core analysis (extraction, patterns, URL structure, ML, risk) is fully
-            active; optional integrations can be enabled server-side.
+            {localParts.join(" and ")} ran in built-in local mode for this report — no external API
+            is configured for {localParts.length > 1 ? "them" : "it"}. Core analysis (extraction,
+            patterns, URL structure, ML, risk) is fully active;{" "}
+            {localParts.length > 1 ? "these integrations" : "this integration"} can be enabled
+            server-side.
           </span>
         </div>
       )}
@@ -284,41 +293,57 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
               {risk.contributors.length === 0 ? (
                 <p className="mt-3 text-sm text-slate-500">No contributing factors were recorded.</p>
               ) : (
-                <ul className="mt-3 space-y-2.5">
-                  {risk.contributors.slice(0, 8).map((c) => {
-                    const mag = Math.min(1, Math.abs(c.impact));
-                    const positive = c.impact > 0;
-                    return (
-                      <li key={c.name} className="text-sm">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="min-w-0 flex-1 truncate text-slate-300" title={c.name}>
-                            {c.name}
-                          </span>
-                          <span
-                            className={`mono-tabular shrink-0 font-mono text-xs ${
-                              positive ? "text-red-300" : c.impact < 0 ? "text-emerald-300" : "text-slate-500"
-                            }`}
-                          >
-                            {c.impact > 0 ? `+${Math.round(c.impact * 100) / 100}` : Math.round(c.impact * 100) / 100}
-                          </span>
-                        </div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-base-800">
-                          <div
-                            className={`h-full origin-left animate-bar-grow rounded-full ${
-                              positive
-                                ? "bg-gradient-to-r from-orange-500/70 to-red-400"
-                                : c.impact < 0
-                                  ? "bg-gradient-to-r from-emerald-500/70 to-emerald-400"
-                                  : "bg-slate-500/60"
-                            }`}
-                            style={{ width: `${mag * 100}%` }}
-                          />
-                        </div>
-                        {c.detail && <p className="mt-1 text-xs leading-relaxed text-slate-500">{c.detail}</p>}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <>
+                  <p className="mt-1 text-xs text-slate-500">
+                    How strongly each evidence channel scored (0–100%). The weighted combination of
+                    these channels — not any single one — produces the risk score.
+                  </p>
+                  <ul className="mt-3 space-y-2.5">
+                    {risk.contributors.slice(0, 8).map((c) => {
+                      // The engine reports `impact` on a signed -1..1 severity
+                      // scale (channel score * 2 - 1).  Rendering that sign
+                      // directly would show a below-neutral channel as if it
+                      // *lowered* the score, which is false: every channel
+                      // only ever adds to the weighted sum.  Recover the
+                      // channel's strength (0..1) and present that instead.
+                      const strength = Math.max(0, Math.min(1, (c.impact + 1) / 2));
+                      const pct = Math.round(strength * 100);
+                      const tier =
+                        strength >= 0.7
+                          ? "text-red-300"
+                          : strength >= 0.45
+                            ? "text-amber-300"
+                            : "text-slate-400";
+                      const bar =
+                        strength >= 0.7
+                          ? "bg-gradient-to-r from-orange-500/70 to-red-400"
+                          : strength >= 0.45
+                            ? "bg-gradient-to-r from-amber-500/70 to-amber-400"
+                            : "bg-slate-500/60";
+                      return (
+                        <li key={c.name} className="text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="min-w-0 flex-1 truncate text-slate-300" title={c.name}>
+                              {c.name}
+                            </span>
+                            <span className={`mono-tabular shrink-0 font-mono text-xs ${tier}`}>
+                              {pct}%
+                            </span>
+                          </div>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-base-800">
+                            <div
+                              className={`h-full origin-left animate-bar-grow rounded-full ${bar}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          {c.detail && (
+                            <p className="mt-1 text-xs leading-relaxed text-slate-500">{c.detail}</p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               )}
             </div>
           </div>

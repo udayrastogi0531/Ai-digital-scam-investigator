@@ -15,8 +15,11 @@ Failure semantics (the whole system relies on these):
 """
 from __future__ import annotations
 
+import ipaddress
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from app.schemas.analysis import ThreatIntelResult
 
@@ -69,4 +72,59 @@ def failure_result(provider: str, *, status: str, error: str) -> ThreatIntelResu
         hits=0,
         error=error,
         checked_at=now_iso(),
+    )
+
+
+_LABEL_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$")
+_MAX_URL_LENGTH = 2000
+
+
+def lookupable_url(url: str | None) -> str | None:
+    """Return the URL if it is something a provider can meaningfully check.
+
+    Providers must never answer "safe"/
+    "not listed" for input they could not have looked up: a malformed string
+    (spaces, no host, a bare label, an unparseable IPv6 literal, …) is
+    "not in the blocklist" for *every* reputation service, which would
+    otherwise be reported as a clean verdict and silently lower risk.
+
+    Returns ``None`` when the input is not a well-formed absolute http(s)
+    URL with a real hostname or IP literal, so callers can emit a
+    non-verdict failure instead of a clean one.
+    """
+    if not url or not isinstance(url, str):
+        return None
+    url = url.strip()
+    if not url or len(url) > _MAX_URL_LENGTH or re.search(r"\s", url):
+        return None
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname or ""
+    except ValueError:  # e.g. malformed IPv6 brackets / bad port
+        return None
+    if parsed.scheme.lower() not in ("http", "https") or not host:
+        return None
+    host = host.rstrip(".").lower()
+    if not host:
+        return None
+    try:
+        ipaddress.ip_address(host)
+        return url
+    except ValueError:
+        pass
+    labels = host.split(".")
+    if len(labels) < 2:  # single-label host: not a public DNS name
+        return None
+    if any(not _LABEL_RE.match(label) for label in labels):
+        return None
+    return url
+
+
+def invalid_url_result(provider: str, url: str | None) -> ThreatIntelResult:
+    """Non-verdict result for input that is not a checkable URL."""
+    preview = (url or "")[:80]
+    return failure_result(
+        provider,
+        status="error",
+        error=f"invalid URL (not a well-formed http/https URL): {preview!r}",
     )

@@ -14,6 +14,8 @@ from app.core.config import get_settings
 from app.intelligence.base import (
     ThreatIntelProvider,
     failure_result,
+    invalid_url_result,
+    lookupable_url,
     now_iso,
     status_from_http,
 )
@@ -36,6 +38,10 @@ class VirusTotalProvider(ThreatIntelProvider):
         return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
 
     async def check(self, url: str) -> ThreatIntelResult:
+        # A malformed string has no VirusTotal record (404), which would
+        # read as "not seen" rather than "could not be checked".
+        if lookupable_url(url) is None:
+            return invalid_url_result(self.name, url)
         headers = {"x-apikey": self.api_key}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:

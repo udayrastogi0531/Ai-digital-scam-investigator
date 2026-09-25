@@ -13,7 +13,8 @@ Pillow>=10.3,<12.0
 scikit-learn>=1.5,<2.0
 joblib>=1.4,<2.0
 numpy>=1.26,<3.0
-pytesseract>=0.3.13,<1.0
+# NOTE: no pytesseract — the OCR provider shells out to the `tesseract` binary
+# (app/extraction/ocr.py), so the Python wrapper was an unused dependency.
 
 # tests
 pytest>=8.2,<9.0

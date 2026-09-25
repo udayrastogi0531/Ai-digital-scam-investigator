@@ -2,6 +2,12 @@
 
 API: ``POST https://safebrowsing.googleapis.com/v4/threatMatches:find``
 Enabled only when ``GOOGLE_SAFE_BROWSING_API_KEY`` is set.
+
+The key is sent in the ``x-goog-api-key`` header rather than the documented
+``?key=`` query string: a query parameter ends up in request URLs, which any
+HTTP client / proxy / access log may then record verbatim (httpx logs the
+full URL at INFO level), leaking the credential.  Google accepts the header
+form for this endpoint — verified live against the v4 API.
 """
 from __future__ import annotations
 
@@ -13,6 +19,8 @@ from app.core.config import get_settings
 from app.intelligence.base import (
     ThreatIntelProvider,
     failure_result,
+    invalid_url_result,
+    lookupable_url,
     now_iso,
     severity_from_score,
     status_from_http,
@@ -38,10 +46,12 @@ class GoogleSafeBrowsingProvider(ThreatIntelProvider):
         self.timeout = settings.threat_intel_timeout_seconds
 
     async def check(self, url: str) -> ThreatIntelResult:
-        endpoint = (
-            "https://safebrowsing.googleapis.com/v4/threatMatches:find"
-            f"?key={self.api_key}"
-        )
+        # Never report a malformed string as "not listed" (= clean): the
+        # API would return an empty match set for input it cannot check.
+        if lookupable_url(url) is None:
+            return invalid_url_result(self.name, url)
+        endpoint = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
+        headers = {"x-goog-api-key": self.api_key or ""}
         payload = {
             "client": {"clientId": "scam-investigator", "clientVersion": "1.0.0"},
             "threatInfo": {
@@ -53,7 +63,7 @@ class GoogleSafeBrowsingProvider(ThreatIntelProvider):
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(endpoint, json=payload)
+                resp = await client.post(endpoint, json=payload, headers=headers)
             if resp.status_code != 200:
                 status = status_from_http(resp.status_code)
                 return failure_result(

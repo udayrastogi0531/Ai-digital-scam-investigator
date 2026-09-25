@@ -14,8 +14,24 @@ import pytest
 _TMP = tempfile.mkdtemp(prefix="scaminv_tests_")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TMP}/test.db")
 os.environ.setdefault("OCR_PROVIDER", "mock")
-os.environ.setdefault("LLM_PROVIDER", "mock")
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "1000")
+
+# The offline suite must stay hermetic: a developer's local ``backend/.env``
+# (real provider keys, live LLM) must never turn `pytest` into a live-network
+# test run or change the calibration assertions.  Environment variables take
+# precedence over the ``.env`` file in pydantic-settings, so forcing them
+# empty here pins every provider to its deterministic mock implementation.
+# The opt-in live tests in ``test_threat_intel_live.py`` are exempt so their
+# documented RUN_LIVE_*_TESTS=1 workflow keeps working with real keys.
+_LIVE_OPT_IN = (
+    os.environ.get("RUN_LIVE_INTEL_TESTS", "") == "1"
+    or os.environ.get("RUN_LIVE_LLM_TESTS", "") == "1"
+)
+if not _LIVE_OPT_IN:
+    os.environ["LLM_PROVIDER"] = "mock"
+    os.environ["LLM_API_KEY"] = ""
+    os.environ["GOOGLE_SAFE_BROWSING_API_KEY"] = ""
+    os.environ["VIRUSTOTAL_API_KEY"] = ""
 # Trained model saved by scripts/ml_training/train.py
 _model = Path(__file__).resolve().parents[1] / "app" / "ml" / "models" / "lr_scam_model.joblib"
 if _model.exists():

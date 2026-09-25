@@ -91,7 +91,7 @@
 |------------------|------------------------------|-----------------------------|------------------------------------|
 | Threat intel     | `ThreatIntelProvider`        | `MockThreatIntelProvider`   | Google Safe Browsing, VirusTotal   |
 | LLM              | `LLMProvider`                | deterministic local         | OpenAI-compatible (any base URL)   |
-| OCR              | `OCRProvider`                | mock (no tesseract)         | pytesseract                        |
+| OCR              | `OCRProvider`                | mock (no tesseract)         | system `tesseract` binary (subprocess) |
 | ML               | `ScamClassifier`             | trained LogisticRegression  | retrained pipeline via trainer     |
 
 Threat-intel providers are queried by URL only (no server-side fetching of

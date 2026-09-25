@@ -24,6 +24,7 @@ import pytest
 
 from app.graph import run_investigation
 from app.intelligence.base import ThreatIntelProvider
+from app.intelligence.base import lookupable_url
 from app.intelligence.google_safe_browsing import GoogleSafeBrowsingProvider
 from app.intelligence.manager import ThreatIntelManager, _merge
 from app.intelligence.mock import MockThreatIntelProvider
@@ -313,6 +314,54 @@ def test_virustotal_rate_limited_and_unknown_404(monkeypatch):
     assert result.status == "ok"
     assert result.verdict == "unknown"  # no record != clean
     assert result.risk_score == 0.1
+
+
+def test_lookupable_url_accepts_real_hosts_and_rejects_garbage():
+    """Only well-formed absolute http(s) URLs may reach a provider."""
+    for good in (
+        "https://example.com/",
+        "http://paypa1-verify.example.net/a?b=c",
+        "http://192.168.1.1/login",
+        "https://[2001:db8::1]/x",
+        "https://sub.domain.co.uk/",
+    ):
+        assert lookupable_url(good) == good
+    for bad in (
+        None,
+        "",
+        "   ",
+        "not a url at all",
+        "Check this.",
+        "example.com",           # no scheme: not an absolute URL
+        "ftp://example.com/x",   # unsupported scheme
+        "http://",               # no host
+        "http://localhost/x",    # single label, not a public DNS name
+        "http://-bad.example.com/",
+        "http://http://example.com/",
+        "http://example.com/" + "a" * 2100,
+    ):
+        assert lookupable_url(bad) is None, bad
+
+
+@pytest.mark.parametrize("provider_cls", [GoogleSafeBrowsingProvider, VirusTotalProvider])
+def test_providers_never_report_malformed_input_as_clean(monkeypatch, provider_cls):
+    """A malformed string must be a non-verdict failure, not 'safe'.
+
+    "Not in the blocklist" is the answer *every* reputation service gives
+    for a string it cannot check, so reporting it as clean would silently
+    lower risk.  The provider must reject it locally, without any HTTP call.
+    """
+    fake = _FakeClient(responses=[_FakeResp(200, {})])
+    _patch_client(monkeypatch, fake)
+    provider = provider_cls(api_key="k")
+    for bad in ("not a url at all", "Check this.", "http://"):
+        result = asyncio.run(provider.check(bad))
+        assert result.verdict == "unknown", bad
+        assert result.status == "error", bad
+        assert result.risk_score == 0.0
+        assert result.checked_at is not None
+        assert "invalid URL" in (result.error or "")
+    assert fake.calls == []
 
 
 def test_mock_intel_is_unknown_or_blocklist_and_labeled(monkeypatch):
