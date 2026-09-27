@@ -32,6 +32,12 @@ def is_ambiguous(classification: ScamClassification | None) -> bool:
 class RuleMatch:
     rule: ScamRule
     matched_keywords: list[str] = field(default_factory=list)
+    matched_patterns: list[str] = field(default_factory=list)
+
+    @property
+    def hit_count(self) -> int:
+        """Number of distinct matched surface forms (keywords + patterns)."""
+        return len(self.matched_keywords) + len(self.matched_patterns)
 
 
 # Credential/account-alarm rules that must NOT fire when the message is a
@@ -45,9 +51,32 @@ _ALARM_RULE_IDS = {
     "bank_account_suspension",
     "bank_card_blocked",
     "phishing_generic",
+    "phishing_shared_document",
     "account_unusual_activity",
     "account_verify_identity",
 }
+
+
+def _has_request_context(text_signals) -> bool:
+    """Whether the message actually asks the recipient to do something.
+
+    Used by ``requires_request_context`` rules (delivery/status notices):
+    the same wording describes a genuine status update and a scam, so the
+    rule is only evidence when the message also demands a payment, a
+    credential/code, sensitive data or an instruction, or applies threat /
+    urgency pressure.
+    """
+    if text_signals is None:
+        return False
+    return bool(
+        text_signals.payment_request
+        or text_signals.credential_request
+        or text_signals.otp_request
+        or text_signals.sensitive_info_request
+        or text_signals.suspicious_instructions
+        or text_signals.urgency_score > 0.0
+        or text_signals.fear_threat_score > 0.0
+    )
 
 
 # Precompiled keyword matchers.  RULES is a static module-level dataset and
@@ -58,6 +87,12 @@ _KEYWORD_RE: dict[str, re.Pattern] = {
     kw: re.compile(rf"(?<![a-z0-9]){re.escape(kw)}(?![a-z0-9])")
     for rule in RULES
     for kw in rule.keywords
+}
+
+# Regex variants declared by a rule (numeric/hyphenated/word-order surface
+# forms literal keywords cannot express).  Compiled once per rule.
+_RULE_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {
+    rule.id: tuple(re.compile(p) for p in rule.patterns) for rule in RULES
 }
 
 
@@ -90,16 +125,29 @@ def match_rules(
     lowered = normalized.lower()
     entity_types = {e.entity_type for e in entities.all()} if entities else set()
     suppress_alarms = _suppress_alarm_rules(text_signals)
+    request_context = _has_request_context(text_signals)
 
     matches: list[RuleMatch] = []
     for rule in RULES:
         if suppress_alarms and rule.id in _ALARM_RULE_IDS:
             continue
-        if rule.required_entities and not rule.required_entities.intersection(entity_types):
+        if rule.required_entities and not entity_types.intersection(rule.required_entities):
+            continue
+        # A status-only rule ("your parcel could not be delivered") is only
+        # evidence of a scam when the message also asks for something or
+        # applies pressure — otherwise the same wording is exactly what a
+        # genuine delivery notification or receipt looks like.  A link alone
+        # does not lift the gate: genuine notices carry official tracking
+        # links, while a scammy link is scored independently by the URL and
+        # threat-intel channels.
+        if rule.requires_request_context and not request_context:
             continue
         hits = [kw for kw in rule.keywords if _KEYWORD_RE[kw].search(lowered)]
-        if hits:
-            matches.append(RuleMatch(rule=rule, matched_keywords=hits))
+        pattern_hits = [p.pattern for p in _RULE_PATTERNS[rule.id] if p.search(lowered)]
+        if hits or pattern_hits:
+            matches.append(
+                RuleMatch(rule=rule, matched_keywords=hits, matched_patterns=pattern_hits)
+            )
     return matches
 
 
@@ -120,7 +168,7 @@ def classify(
     for match in matches:
         cat = match.rule.category
         category_scores[cat] = category_scores.get(cat, 0.0) + match.rule.weight
-        category_hits[cat] = category_hits.get(cat, 0) + len(match.matched_keywords)
+        category_hits[cat] = category_hits.get(cat, 0) + match.hit_count
 
     # category boost from structured text signals
     if text_signals is not None:
@@ -188,6 +236,7 @@ def matches_to_signals(matches: list[RuleMatch]) -> list[EvidenceSignal]:
                     "rule_name": match.rule.name,
                     "category": match.rule.category,
                     "matched_keywords": match.matched_keywords,
+                    "matched_patterns": match.matched_patterns,
                     "weight": match.rule.weight,
                 },
             )

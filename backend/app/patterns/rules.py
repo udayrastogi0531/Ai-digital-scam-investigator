@@ -41,6 +41,21 @@ class ScamRule:
     weight: float = 1.0
     severity: str = "medium"  # low | medium | high | critical
     confidence: float = 0.6
+    # Regular expressions matched in addition to the literal ``keywords``.
+    # Literal matching is exact, so it can never cover a *variant* of a
+    # phrase: ``guaranteed 40% returns`` has a token between the two words
+    # of the keyword ``guaranteed returns``, and ``risk-free`` is hyphenated
+    # where the keyword is ``risk free``.  Patterns express those families
+    # once instead of enumerating every surface form as a separate keyword.
+    patterns: tuple[str, ...] = ()
+    # ``True`` for rules that describe a *situation* ("your parcel could not
+    # be delivered") rather than a demand.  Such wording is equally typical of
+    # a genuine status update and of a scam, so the rule only fires when the
+    # message also carries an actual ask — a payment/credential/OTP request,
+    # sensitive-data request, suspicious instruction, urgency or a threat.
+    # Without this gate a benign receipt mentioning "your parcel" was
+    # classified as a delivery scam even though nothing was requested.
+    requires_request_context: bool = False
 
 
 # fmt: off
@@ -94,9 +109,33 @@ RULES: list[ScamRule] = [
     # ------------------------------------------------------ investment scams
     ScamRule("invest_guaranteed_returns", "investment_scam", "Guaranteed returns",
              "Guarantees profit or claims risk-free investing",
-             ("guaranteed returns", "no risk", "risk free", "zero risk", "guarantees",
-              "guaranteed profit", "double your money", "passive income", "high returns",
-              "huge profit", "guaranteed roi"), weight=2.0, severity="high", confidence=0.8),
+             ("guaranteed returns", "guarantees", "guaranteed profit", "double your money",
+              "passive income", "high returns", "huge profit", "guaranteed roi"),
+             patterns=(
+                 # "guaranteed 40% returns", "guarantees 20 % monthly returns", "guaranteed 400%"
+                 r"\bguarantee(?:s|d)? (?:up to )?\d+(?:\.\d+)?\s?%",
+                 # "guaranteed high returns", "guaranteed passive income", "guaranteed fixed profit"
+                 r"\bguaranteed (?:a |an |high |huge |massive |fixed |steady |passive )*"
+                 r"(?:returns?|profits?|income|payouts?|gains?|yield|roi)\b",
+                 # "risk-free investment", "risk free trading", "riskfree returns"
+                 r"\brisk[ -]?free (?:investment|investing|returns?|profits?|income|trading|growth|wealth)\b",
+                 # "double your investment / capital / deposit / portfolio"
+                 r"\bdouble your (?:money|investment|investments|capital|deposit|funds|portfolio|savings|earnings)\b",
+                 # "earn up to 5% daily", "make 3% per week", "receive 10% monthly"
+                 r"\b(?:earn|make|receive) (?:up to )?\d+(?:\.\d+)?\s?% "
+                 r"(?:daily|weekly|monthly|yearly|per (?:day|week|month|year)|a (?:day|week|month|year))\b",
+             ), weight=2.0, severity="high", confidence=0.8),
+    ScamRule("invest_risk_free_claim", "investment_scam", "Risk-free / no-loss claim",
+             "Claims an investment or its returns carry no risk and cannot lose money",
+             (),
+             patterns=(
+                 # "risk-free investment", "no risk trading", "zero-risk returns"
+                 r"\b(?:risk[ -]?free|riskless|no[ -]?risk|zero[ -]?risk|no-loss) (?:investment|investing|returns?|"
+                 r"profits?|income|trading|trade|portfolio|deposit|yield|fund|funds|money|capital|growth)\b",
+                 # "...investment ... risk-free" (claim order reversed)
+                 r"\b(?:investment|invest|investing|returns?|profits?|trading|trade|portfolio|deposit|yield|fund|"
+                 r"funds|capital|money)\b[^.!?]{0,40}\b(?:risk[ -]?free|riskless|no[ -]?risk|zero[ -]?risk|no-loss)\b",
+             ), weight=1.5, severity="high", confidence=0.7),
     ScamRule("invest_time_limited", "investment_scam", "Time-limited opportunity",
              "Creates urgency with closing offers",
              ("limited time", "closing soon", "only today", "exclusive offer", "act now",
@@ -153,14 +192,15 @@ RULES: list[ScamRule] = [
              ("your package", "your parcel", "failed delivery", "address confirmation",
               "could not be delivered", "requires confirmation", "confirm your address",
               "address details", "returned to sender", "redelivery", "undeliverable",
-              "delivery attempt"), weight=2.0, severity="high"),
+              "delivery attempt"), weight=2.0, severity="high", requires_request_context=True),
     ScamRule("delivery_fee_request", "delivery_scam", "Delivery fee request",
              "Asks for payment to release the package",
              ("delivery fee", "customs", "claim your package", "shipping fee",
               "pay to receive", "release fee"), weight=2.0, severity="high", confidence=0.75),
     ScamRule("delivery_tracking_link", "delivery_scam", "Tracking link bait",
              "Sends a tracking link, often to a lookalike site",
-             ("tracking number", "track your package", "track your order", "track here"), weight=1.0, severity="medium"),
+             ("tracking number", "track your package", "track your order", "track here"),
+             weight=1.0, severity="medium", requires_request_context=True),
     # --------------------------------------------------------- lottery scams
     ScamRule("lottery_you_won", "lottery_scam", "You won a prize",
              "Unsolicited prize/lottery win notification",
@@ -214,6 +254,26 @@ RULES: list[ScamRule] = [
               "urgent action required", "verify your email", "suspicious activity",
               "unauthorized transaction", "verify your details", "security alert",
               "account verification"), weight=2.0, severity="high"),
+    ScamRule("phishing_shared_document", "phishing", "Shared-document link bait",
+             "Unsolicited link to a shared document or file to capture access",
+             # Deliberately narrow: only the *sharing* cover story, never
+             # generic access wording.  "Secure portal" also appears in
+             # banking-verification phishing (where the more specific banking
+             # rule must keep the category), "open the file" / "view the
+             # document" is ordinary colleague talk, and "open the document"
+             # is exactly what a legitimate e-signature notice says.
+             # "document has been shared" (the phishing phrasing) is kept;
+             # "file has been shared" is not, because that is the wording real
+             # file-sync services use for their own benign notifications.
+             ("shared document", "shared file", "document has been shared",
+              "document portal", "shared via"),
+             required_entities=("url",),
+             # The cover story plus the link is a complete phishing lure rather
+             # than a fragment of one, so the weight sits at the top of the
+             # scale with the other independently-decisive lures (gift cards,
+             # wallet drain) — while ``required_entities`` still makes the
+             # wording alone insufficient.
+             weight=2.5, severity="high", confidence=0.7),
     ScamRule("phishing_impersonation", "impersonation_scam", "Authority impersonation",
              "Claims to be a government, bank or official body",
              ("official", "government", "police", "irs", "hmrc", "legal department",

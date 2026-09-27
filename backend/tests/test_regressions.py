@@ -10,7 +10,7 @@ from app.extraction.text_extractor import extract_all
 from app.extraction.url_analysis import analyze_url
 from app.graph import run_investigation
 from app.intelligence.mock import MockThreatIntelProvider
-from app.patterns.engine import classify, is_ambiguous
+from app.patterns.engine import classify, is_ambiguous, match_rules
 from app.risk.engine import RiskInputs, compute_risk, sufficiency_label, sufficiency_score
 from app.schemas.evidence import InputPayload
 from app.services.investigation_service import prepare_state
@@ -238,6 +238,75 @@ def test_strong_banking_phishing_risk_band(client):
     assert body["status"] == "completed"
     assert body["risk"]["level"] in ("HIGH", "CRITICAL")
     assert body["risk"]["score"] >= 50
+
+
+# ---------------------------------------------------------------------------
+# Detection-quality fixes: generalised matching + scam-context gating
+# ---------------------------------------------------------------------------
+
+def _rule_ids(text: str) -> set[str]:
+    return {m.rule.id for m in match_rules(text, extract_all(text), analyze_text_signals(text))}
+
+
+def test_numeric_and_hyphenated_guaranteed_returns_are_matched():
+    """Pattern variants literal keywords cannot express must still match."""
+    text = "Guaranteed 40% returns in 7 days. Double your investment risk-free."
+    matches = match_rules(text, extract_all(text), analyze_text_signals(text))
+    ids = {m.rule.id for m in matches}
+    assert "invest_guaranteed_returns" in ids  # "guaranteed 40% returns", "double your investment"
+    assert "invest_risk_free_claim" in ids  # "investment risk-free"
+    strong = next(m for m in matches if m.rule.id == "invest_guaranteed_returns")
+    assert strong.hit_count >= 2
+    assert strong.matched_patterns  # the matched surface forms are explainable
+
+
+def test_risk_free_claim_variants_are_matched():
+    for text in (
+        "Zero-risk investing: our fund returns 8% monthly, risk-free and worry free.",
+        "A no risk portfolio with guaranteed 6% yearly returns.",
+    ):
+        assert "invest_risk_free_claim" in _rule_ids(text), text
+
+
+def test_generalised_signals_feed_the_ml_feature():
+    """The pattern change is visible to the model's scam_keyword_hits feature."""
+    from app.ml.features import extract_features
+
+    features = extract_features("Guaranteed 40% returns. Double your investment risk-free.")
+    assert features["scam_keyword_hits"] >= 2
+    assert features["reward_score"] > 0.0
+    assert features["pressure_score"] > 0.0
+
+
+def test_status_only_delivery_claims_need_a_request():
+    bare = "Your parcel could not be delivered because the address could not be confirmed."
+    assert not (_rule_ids(bare) & {"delivery_undeliverable", "delivery_tracking_link"})
+
+    asked = "Your parcel could not be delivered. Pay the $2.99 redelivery fee within 24 hours."
+    assert "delivery_undeliverable" in _rule_ids(asked)
+
+
+def test_rule_required_entities_are_enforced():
+    """`required_entities` gating works (it decides the shared-document rule)."""
+    without_link = "Hi, I've shared the document with you. Please review the shared document."
+    assert "phishing_shared_document" not in _rule_ids(without_link)
+
+    with_link = (
+        "A document has been shared with you. Review it at "
+        "https://docs-share.example.com/view?token=9f2a."
+    )
+    assert "phishing_shared_document" in _rule_ids(with_link)
+
+
+def test_shared_document_language_does_not_steal_the_banking_category():
+    """A banking verification demand keeps its own (more specific) category."""
+    text = (
+        "Dear customer, routine verification is required to keep your card active. "
+        "Please complete verification using the secure portal at "
+        "https://meridianbank-secure.example/verify within 72 hours."
+    )
+    classification, _ = classify(text, extract_all(text), analyze_text_signals(text))
+    assert classification.primary == "banking_scam"
 
 
 def test_risk_bands_are_monotonic():

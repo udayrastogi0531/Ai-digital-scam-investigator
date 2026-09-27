@@ -53,15 +53,19 @@ _FEAR_THREAT = [
 _REWARD = [
     "congratulations", "you have won", "winner", "prize", "lottery", "jackpot",
     "gift card", "free", "bonus", "cash reward", "selected", "exclusive offer",
-    "claim your", "won a", "lucky", "winning", "double your money",
-    "guaranteed returns", "guaranteed income",
+    "claim your", "won a", "lucky", "winning",
+    # "double your money", "guaranteed returns/income" and their numeric /
+    # hyphenated variants ("guaranteed 40% returns", "double your investment")
+    # are covered by the reward regexes in _REGEX_PATTERNS.
 ]
 _PRESSURE = [
     "limited", "only today", "hurry", "first come", "don't miss", "act fast",
     "last chance", "few spots", "guaranteed", "guarantees", "only a few", "register now",
-    "don't wait", "while supplies last", "zero risk", "no risk", "risk free",
+    "don't wait", "while supplies last",
     "seats left", "spots left", "positions left", "slots left", "high demand",
     "act immediately", "don't miss out",
+    # "zero risk" / "no risk" / "risk free" (and hyphen variants) are covered
+    # by the pressure regexes in _REGEX_PATTERNS.
 ]
 _AUTHORITY = [
     "official", "government", "police", "irs", "hmrc", "bank", "security team",
@@ -210,11 +214,23 @@ _REGEX_PATTERNS: dict[str, list[str]] = {
         r"(?:only|just) \d+ (?:hours?|days?|minutes?) (?:left|remaining|to)",
         r"\boffer (?:closes?|ends|expires) (?:at|tonight|soon|today|midnight)",
         r"\bcloses? (?:at|tonight|midnight|soon)",
+        # a link/token that only works for a short window ("the link is valid
+        # for one day", "your link expires in 24 hours") — a time box on the
+        # action the message is pushing, expressed with or without digits.
+        r"\b(?:link|invitation|access|token|code) (?:is )?(?:valid|active) (?:for|until) [^.;]{2,24}",
+        r"\b(?:link|invitation|access) (?:will )?expires? (?:in|after|within) \d+ (?:hours?|days?|minutes?)",
     ],
     "pressure": [
         r"only \d+ (?:seats?|spots?|places?|positions?|slots?|vacancies?) (?:left|remain|remaining)",
         r"\d+ (?:seats?|spots?|places?|positions?) remaining",
         r"first \d+ (?:people|members|customers|callers)",
+        # risk-free / no-risk claims, including the hyphenated spellings the
+        # literal phrase list cannot express
+        r"\brisk[ -]?free\b",
+        r"\b(?:no|zero)[ -]?risk\b",
+        # "earn up to 5% daily", "make 3% per week"
+        r"\b(?:earn|make|receive) (?:up to )?\d+(?:\.\d+)?\s?% "
+        r"(?:daily|weekly|monthly|yearly|per (?:day|week|month|year))\b",
     ],
     "payment": [
         r"(?:pay|send|wire|transfer) (?:us|me|them|the )?\$?\s?\d+",
@@ -224,6 +240,16 @@ _REGEX_PATTERNS: dict[str, list[str]] = {
         # "send 0.05 btc", "deposit 2 eth", "transfer 1 bitcoin" — a request to
         # move a crypto amount is an instruction to transfer value.
         r"\b(?:send|deposit|transfer) (?:us |me |them |the )?[\d.]+ ?(?:btc|usdt|eth|bitcoin|ethereum|crypto)\b",
+    ],
+    "reward": [
+        # numeric guaranteed-return claims: "guaranteed 40% returns",
+        # "guarantees 20 % monthly returns"
+        r"\bguarantee(?:s|d)? (?:up to )?\d+(?:\.\d+)?\s?%",
+        # "guaranteed high returns", "guaranteed passive income"
+        r"\bguaranteed (?:a |an |high |huge |massive |fixed |steady |passive )*"
+        r"(?:returns?|profits?|income|payouts?|gains?|yield)\b",
+        # "double your money / investment / capital / deposit"
+        r"\bdouble your (?:money|investment|investments|capital|deposit|funds|bitcoin|btc|eth|crypto|portfolio)\b",
     ],
 }
 
