@@ -63,6 +63,16 @@
   request unless a requestive verb (enter/reply with/send us/…) is present, and protective
   warnings ("never share your OTP") plus reassurance ("no action needed") suppress credential/
   account alarm rules. This is what keeps legit 2FA texts, receipts and security notices LOW.
+- **Rules match keywords *and* declarative regex variants.** Each `ScamRule` carries literal
+  `keywords` plus optional `patterns` (compiled once at import, matched over the normalised text),
+  so numeric (`guaranteed 40% returns`), hyphenated (`risk-free`) and word-order
+  (`investment … risk-free`) variants of the same claim are covered without enumerating every
+  surface form as a keyword. Rules may also declare `required_entities` (e.g. the shared-document
+  link-bait rule only fires when a URL is present) and `requires_request_context` — status-only
+  wording such as “your parcel could not be delivered” is only evidence when the message also
+  requests a payment/credential/code, gives an instruction, or applies urgency/threat pressure.
+  A link alone does **not** lift that gate: genuine notices carry official tracking links, while a
+  scammy link is scored independently by the URL and threat-intel channels.
 - **URL-anchored normalization.** Submissions normalize over *applicable* channels only, and when
   the assessment is URL-anchored — a URL with structural risk ≥ `URL_ANCHOR_MIN` (0.4), or a
   threat-intel verdict of suspicious/malicious — channels that are applicable but *silent* (score

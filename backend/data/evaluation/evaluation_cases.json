@@ -274,8 +274,7 @@
       "primary_category": "phishing",
       "minimum_risk_level": "MEDIUM",
       "note": "HARD POSITIVE: subtle phishing — no fear or urgency words, but an unsolicited link to a non-official portal."
-    },
-    "known_hard_case": true
+    }
   },
   {
     "id": "s04_otp_card",
@@ -423,7 +422,7 @@
       "is_scam": true,
       "primary_category": "delivery_scam",
       "minimum_risk_level": "MEDIUM",
-      "note": "Delivery scam demanding a fee to release the parcel. delivery-fee text scores 45-49: calibrated at MEDIUM."
+      "note": "Delivery scam demanding a fee to release the parcel. Scores ~80 (CRITICAL): the fee demand saturates the pattern and payment channels while the brand-lookalike URL anchors the assessment."
     }
   },
   {
@@ -536,7 +535,7 @@
       "is_scam": true,
       "primary_category": "romance_scam",
       "minimum_risk_level": "MEDIUM",
-      "note": "Romance scam: rapid affection + remote-deployment story + money request. Scores ~49.8: borderline MEDIUM/HIGH, calibrated at MEDIUM."
+      "note": "Romance scam: rapid affection + remote-deployment story + money request. Scores ~45: MEDIUM, just under the HIGH boundary (50) with a single rule cluster."
     }
   },
   {

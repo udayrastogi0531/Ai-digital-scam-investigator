@@ -9,10 +9,11 @@ REAL API pipeline:
   (or documented-acceptable) category;
 * sparse evidence must not produce a confident verdict.
 
-``known_hard_case`` entries are excluded from band assertions on purpose:
-they are documented as cases the deterministic engine honestly cannot
-disambiguate (e.g. an unsolicited shared-document link with no other
-signals).  The corpus notes explain why.
+``known_hard_case`` entries would be excluded from band assertions: the flag
+documents a case the deterministic engine honestly cannot disambiguate.  No
+case currently carries it — the last one (an unsolicited shared-document link)
+is now detected by the shared-document link-bait rule and is asserted like any
+other scam case.
 """
 from __future__ import annotations
 
