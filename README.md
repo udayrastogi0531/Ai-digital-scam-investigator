@@ -1,791 +1,756 @@
 <div align="center">
 
-# 🛡️ ScamIntelligence — AI Digital Scam Investigator
+# 🛡️ AI Digital Scam Investigator
 
-### AI-Powered Digital Scam & Phishing Investigation Platform
+### An evidence-first AI cybersecurity system for investigating suspicious messages, URLs and screenshots in real time.
 
-Investigate suspicious messages, URLs and screenshots through a multi-layer evidence
-pipeline — URL analysis, linguistic signals, scam-pattern rules, entity extraction, machine
-learning and threat intelligence — aggregated by a **deterministic risk engine** into an
-explainable, audit-friendly investigation report.
+Investigate suspicious content through a multi-layer evidence pipeline — URL analysis, linguistic
+signals, declarative scam-pattern rules, entity extraction, machine learning and live threat
+intelligence — aggregated by a **deterministic risk engine** into an explainable, audit-friendly
+investigation report.
 
 ![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agentic_AI-111827?style=for-the-badge)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?style=for-the-badge&logo=next.js&logoColor=white)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-local_store-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-180_passing_%7C_11_skipped-brightgreen?style=for-the-badge)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
-> 🚧 **Project status:** active engineering project — a portfolio-grade demonstration of
-> agentic investigation systems. Detection is probabilistic decision support, **not** a
-> guarantee.
+[Repository](https://github.com/udayrastogi0531/Ai-digital-scam-investigator) ·
+[Architecture](docs/ARCHITECTURE.md) ·
+[Deployment](docs/DEPLOYMENT.md) ·
+[Roadmap](docs/ROADMAP.md) ·
+[Contributing](docs/CONTRIBUTING_CHECKLIST.md)
+
+> **Project status:** an actively engineered, portfolio-grade system demonstrating agentic
+> investigation architecture. Detection is **probabilistic decision support**, not a guarantee, and
+> no cloud deployment is claimed — see [Live integration status](#live-integration-status).
 
 </div>
 
 ---
 
-## Table of Contents
+## Table of contents
 
-- [Overview](#overview)
-- [Why ScamIntelligence](#why-scamintelligence)
-- [Key Features](#key-features)
-- [How It Works](#how-it-works)
-- [System Architecture](#system-architecture)
-- [Investigation Pipeline](#investigation-pipeline)
-- [AI / ML Architecture](#ai--ml-architecture)
-- [Risk Scoring](#risk-scoring)
-- [Evidence & Explainability](#evidence--explainability)
-- [Threat Intelligence](#threat-intelligence)
-- [URL Analysis](#url-analysis)
-- [Text Analysis](#text-analysis)
-- [OCR](#ocr)
-- [Entity Extraction](#entity-extraction)
-- [Frontend](#frontend)
-- [Backend](#backend)
-- [API](#api)
-- [Data Model](#data-model)
+- [Project snapshot](#project-snapshot)
+- [The problem](#the-problem)
+- [The solution](#the-solution)
+- [Key features](#key-features)
+- [Architecture](#architecture)
+- [Investigation flow](#investigation-flow)
+- [Risk decision model](#risk-decision-model)
+- [Real-time investigation](#real-time-investigation)
 - [Evaluation](#evaluation)
+- [Live integration status](#live-integration-status)
+- [UI and product](#ui-and-product)
+- [Product preview](#product-preview)
+- [Quick start](#quick-start)
+- [Environment variables](#environment-variables)
+- [API](#api)
 - [Testing](#testing)
 - [Security](#security)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Demo Mode](#demo-mode)
-- [Production Providers](#production-providers)
-- [Live integration status](#live-integration-status)
-- [Live end-to-end acceptance run](#live-end-to-end-acceptance-run)
-- [Deployment](#deployment)
-- [Project Structure](#project-structure)
+- [Demo mode and going live](#demo-mode-and-going-live)
+- [Data model and persistence](#data-model-and-persistence)
+- [Project structure](#project-structure)
 - [Limitations](#limitations)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
-- [License](#license)
+- [License and author](#license-and-author)
 
 ---
 
-## Overview
+## Project snapshot
 
-**ScamIntelligence** treats scam detection as an **investigation problem**, not a chat-style
-classification problem. Given a suspicious email, SMS, WhatsApp message, URL, or screenshot, it:
-
-1. extracts structured evidence from every input channel,
-2. analyzes each channel with specialised agents,
-3. correlates the evidence with quality-aware weighting,
-4. computes a **deterministic 0–100 risk score** with per-signal contributors, and
-5. produces an explainable report with recommended actions — all stored to an
-   investigation history.
-
-The result is an **investigation / risk assessment**. The system never claims to have
-"verified" a message as malicious or safe — every verdict is evidence-grounded and carries an
-explicit **evidence-sufficiency** label (`SUFFICIENT` / `PARTIAL` / `INSUFFICIENT`).
-
-**What it does:** analyzes structure, language, entities, patterns and available intelligence;
-scores risk deterministically; explains why; recommends actions.
-
-**What it does NOT do:** it does not fetch the content of arbitrary URLs (no SSRF surface), it
-does not guarantee detection, and in default demo mode it does not consult real external threat
-intelligence.
-
----
-
-## Why ScamIntelligence
-
-| Traditional approach | This project |
+| Layer | Technology |
 |---|---|
-| An LLM judges "is this a scam?" from raw text | An **agentic pipeline** extracts evidence first, then scores it |
-| The verdict is a black-box probability | **Deterministic risk** with auditable per-signal contributors |
-| Silent channels dilute strong signals | **URL-anchored normalization** — a strong malicious URL is never drowned out by neutral text |
-| "Low risk" can masquerade as "safe" | Explicit **evidence-sufficiency** labels distinguish *low risk* from *insufficient evidence* |
-| Provider failures look like clean results | A failing provider is **no information** — never a clean verdict, never lower risk |
+| Backend API | FastAPI · Pydantic v2 · Python 3.13 |
+| Frontend | Next.js 15 (App Router) · React 19 · TypeScript 5 · Tailwind CSS v3 |
+| AI orchestration | LangGraph 0.2.x (typed state, parallel branches, conditional edges) |
+| Detection | Declarative scam-pattern rules · linguistic text signals · deterministic URL analysis |
+| Machine learning | scikit-learn `LogisticRegression` pipeline (shipped `.joblib` artifact) |
+| Threat intelligence | Google Safe Browsing · VirusTotal (header-authenticated, failure-safe) |
+| OCR | System **Tesseract** via subprocess (labelled mock fallback) |
+| LLM | OpenAI-compatible provider (Gemini verified) for **explanation only** |
+| Database | SQLite local (verified) · PostgreSQL 16 code path + compose config (not verified locally) |
+| Packaging | `docker-compose.yml` + Dockerfiles included (not executed in this environment) |
 
 ---
 
-## Key Features
+## The problem
 
-| Capability | Description |
+Modern scams are not single-signal. A realistic message combines:
+
+- **social engineering** — urgency, fear, authority, trust-building
+- **URLs** — lookalike domains, homoglyphs, punycode, IP hosts, credential paths, shorteners
+- **impersonation** — a claimed bank, courier, employer, government body or executive
+- **payment pressure** — fees, deposits, gift cards, crypto transfers
+- **credential theft** — OTPs, passwords, verification codes, KYC documents
+- **screenshots** — evidence that only exists as an image
+- **topical cover stories** — fake delivery notices, job offers, investment claims, invoices
+
+Naive approaches fail for structural reasons:
+
+| Naive approach | Why it fails |
 |---|---|
-| 🔗 **URL Analysis** | Deterministic structural analysis — brand lookalikes, punycode/homoglyph impersonation, IP hosts, dangerous schemes, redirect structures, credential/phishing paths, missing HTTPS. Never fetches the URL. |
-| 🧾 **Text Analysis** | Linguistic signal detection — urgency/fear language, credential & OTP requests, payment requests, suspicious instructions, brand impersonation claims. Requestive-only rules keep legitimate OTP/2FA texts, receipts and security notices LOW. |
-| 🖼️ **OCR** | Screenshot analysis via Tesseract when installed (auto-detected); deterministic mock fallback otherwise, clearly labeled. |
-| 🏷️ **Entity Extraction** | URLs, emails, phone numbers, monetary amounts, companies, banks, organizations, dates — surfaced in the report. |
-| 🛰️ **Threat Intelligence** | Google Safe Browsing and VirusTotal providers (live, env-keyed) with a normalized boundary; deterministic demo provider by default. Failures are `unavailable`/`error`/`rate_limited` — never "clean". |
-| 🕸️ **Pattern Detection** | 30+ scam-pattern rules across banking, phishing, impersonation, job/advance-fee, delivery, lottery, romance, crypto, tech-support and account-takeover families — each matched by literal keywords **and** declarative regex variants, with scam-context gating so status wording ("your parcel could not be delivered") is only evidence when the message actually asks for something. |
-| 🤖 **ML Signal** | scikit-learn LogisticRegression classifier over language/text features contributes a probability signal — the smallest risk weight by design, never the final verdict. Trained on the real UCI SMS Spam Collection (5,159 messages, CC BY 4.0) — see [AI / ML Architecture](#ai--ml-architecture). |
-| ⚖️ **Risk Scoring** | Deterministic weighted engine producing a 0–100 score, risk band (LOW/MEDIUM/HIGH/CRITICAL), confidence and per-signal contributors. |
-| 🧩 **Evidence Correlation** | Quality-weighted aggregation — applicable-but-silent channels drop out of normalization; strong evidence is not diluted. |
-| ⏱️ **Evidence Timeline** | Every stage of the LangGraph run is recorded with durations (parse, OCR, analyze, URL, entities, intel, ML, correlate, risk, explain, report). |
-| 📄 **Explainable Results** | Grounded summary, likely objective, suspicious indicators, recommended actions and a full report — all derived from the structured evidence. |
-| 📚 **Investigation History** | Persisted investigations with search, risk-level/type filters and pagination. |
+| Keyword blocklists | Trivially bypassed (`40% returns`, `risk-free`, homoglyph domains) and trigger false positives on legitimate receipts and security notices |
+| "Ask an LLM if this is a scam" | Non-reproducible, unexplainable, impossible to audit or regression-test, and free to invent findings |
+| A single ML classifier probability | Trained on one channel, opaque, and easily diluted by unrelated text |
+| Silent channel averaging | A strongly malicious URL gets drowned out by neutral surrounding text |
 
 ---
 
-## How It Works
+## The solution
+
+Treat detection as an **investigation**, not a chat classification. Every submission is decomposed
+into structured, typed evidence; each channel is analysed independently; the evidence is correlated
+with quality-aware weighting; and a **deterministic risk engine** produces the score.
 
 ```text
-User
- ↓
-Submit suspicious content (text / URLs / screenshot)
- ↓
-FastAPI validation · rate limiting · upload checks
- ↓
-LangGraph investigation workflow
- ↓
-Parallel analysis channels (URL · text · OCR · entities · intel · ML · patterns)
- ↓
-Evidence aggregation & correlation
- ↓
-Deterministic risk scoring
- ↓
-Explainable result + recommended actions
- ↓
-Investigation history
+INPUT                text · URLs · screenshot
+  ↓
+NORMALISE            validation · limits · rate limiting
+  ↓
+EXTRACT EVIDENCE     entities · URLs · text signals · pattern matches
+  ↓
+MULTI-SOURCE         URL analysis · threat intel · ML · entities · OCR
+  INVESTIGATION
+  ↓
+CORRELATE            quality-aware aggregation · anchors
+  ↓
+RISK ENGINE          0–100 deterministic score · band · sufficiency
+  ↓
+GROUNDED AI          explanation and report synthesis
+  ↓
+REPORT               stored, searchable, auditable
 ```
+
+> **The LLM never makes the risk decision.** It receives only structured evidence (`ReportContext`)
+> under an evidence-only prompt contract and can neither change the score nor assert a scam category
+> the deterministic evidence does not support. If the provider is unavailable, the system falls back
+> to a deterministic explanation and the investigation still completes.
 
 ---
 
-## System Architecture
+## Key features
 
-```mermaid
-flowchart TD
-    U[User] --> UI[Next.js Web Interface]
-    UI --> API[FastAPI API Layer]
+### 🔎 Multi-input investigation
 
-    API --> INV[LangGraph Investigation Orchestrator]
-
-    INV --> OCR[OCR Branch]
-    INV --> PARSE[Parse & Normalize]
-    PARSE --> TXT[Text Analysis]
-    TXT --> URL[URL Analysis]
-    URL --> INTEL[Threat Intelligence]
-    TXT --> ENT[Entity / Brand Analysis]
-    TXT --> PAT[Scam-Pattern Rules]
-    TXT --> ML[ML Classifier]
-
-    OCR --> CORR[Evidence Correlation]
-    URL --> CORR
-    INTEL --> CORR
-    ENT --> CORR
-    PAT --> CORR
-    ML --> CORR
-
-    CORR --> RISK[Deterministic Risk Engine]
-    RISK --> EXPLAIN[Grounded Explanation]
-    EXPLAIN --> REPORT[Report Generation]
-
-    REPORT --> DB[(SQLite / PostgreSQL)]
-    DB --> UI
-```
-
-**Honesty invariants** enforced in code:
-
-- Evidence is **structured first** — every analysis emits typed signals (`source`, `signal`,
-  `severity`, `confidence`, `description`, `detail`), never free-form claims.
-- Risk is **deterministic** — the LLM can never change the score; it only synthesizes
-  explanations from the evidence it is given.
-- Mocks are **labeled** (`is_mock`, `[DEMO]`, `provider_mode`) and surfaced as warnings in the UI.
-- Uncertainty is **explicit** — sparse inputs get `INSUFFICIENT` evidence and are worded as
-  *"low risk based on available evidence — not a verified safe result"*.
-
----
-
-## Investigation Pipeline
-
-Typed `InvestigationState` flows through LangGraph nodes:
-
-| Stage | Node | Purpose |
-|---|---|---|
-| 1 | `parser_node` | Normalize input, extract entities and initial signals |
-| 2 | `ocr_node` | Screenshot → text (conditional — only when an image is present) |
-| 3 | `text_analysis_node` | Linguistic signals (urgency, fear, requests, instructions) |
-| 4 | `url_analysis_node` | Structural URL risk + brand impersonation |
-| 5 | `entity_analysis_node` | Entity/brand evidence |
-| 6 | `threat_intel_node` | Provider lookups (normalized, failure-safe) |
-| 7 | `ml_node` | Classifier probability signal |
-| 8 | `correlation_node` | Merge equal-depth branches, weight evidence |
-| 9 | `classify_node` | Category + alternatives (rule-engine primary, optional LLM refinement) |
-| 10 | `risk_node` | Deterministic 0–100 score, band, sufficiency |
-| 11 | `explain_node` | Grounded explanation (LLM or deterministic fallback) |
-| 12 | `report_node` | Full structured report |
-
-Parallel branches are padded to equal depth so LangGraph merges them correctly; timeline
-entries are de-duplicated defensively.
-
----
-
-## AI / ML Architecture
-
-### Machine Learning
-
-**Model.** A scikit-learn `LogisticRegression` (StandardScaler → LR, `C=0.8`,
-`class_weight="balanced"`) over feature-engineered **language/text signals** — message length,
-word counts, urgency/fear/reward/pressure scores, credential/OTP/payment-request intents,
-entity presence, punctuation and casing statistics. URL-*presence* features are deliberately
-absent: this product investigates suspicious URLs by design, so “a URL is present” is
-uninformative for the language model, and URL structural risk is already scored
-deterministically by the `url_risk` channel (threat intel included). The model ships as a
-`.joblib` pipeline exposed through `app/ml/` (`features`, `classifier`, `service`, `dataset`)
-and contributes one weighted input signal — the smallest weight in the engine — it never
-overrides the deterministic verdict.
-
-**Training data.** The shipped model is trained on the **real UCI SMS Spam Collection v.1**
-(`backend/data/datasets/real/sms_spam_uci.csv`, 5,159 messages, **CC BY 4.0** — full provenance
-in `backend/data/datasets/README.md`). The synthetic set (`data/datasets/scam_messages.csv`)
-remains for offline pipeline exercise. Training uses the validated loader with stratified
-splits, exact-duplicate removal, malformed-row rejection, and a hard guard that refuses the
-evaluation corpus (contamination protection). Reproduce with:
-
-```bash
-cd backend
-.venv/Scripts/python.exe scripts/ml_training/train.py --dataset data/datasets/real/sms_spam_uci.csv --no-categories
-```
-
-**ML model evaluation** (held-out test split of the UCI corpus, seed 42):
-
-| Metric | Value |
+| Input | Handling |
 |---|---|
-| Train / validation / test | 3,611 / 516 / 1,032 |
-| Class distribution (corpus) | 4,517 benign / 642 scam (13% prevalence) |
-| Accuracy | 0.9312 |
-| Precision | 0.6748 |
-| Recall | 0.8594 |
-| F1 | 0.7560 |
-| ROC-AUC | 0.9707 |
-| Confusion matrix (test) | benign 851/53 · scam 18/110 |
-| Decision threshold | 0.55 (max-F1 on the validation split) |
+| Suspicious message (email / SMS / WhatsApp text) | Normalised, entity-extracted and analysed by the language + pattern channels |
+| URL (one or up to 20 per submission) | Deterministic structural analysis; never fetched |
+| Screenshot / image | Validated upload → Tesseract OCR → the extracted text enters the **same** pipeline |
+| Combined evidence | Text + URL + OCR evidence is correlated as a single investigation |
 
-**Honest limits of the real corpus.** The UCI SMS set is **SMS spam/ham supervision** — it is
-not a complete phishing/URL/scam dataset: 13% scam prevalence, no crypto-transfer or
-URL-heavy content, and English-only messages. Scam categories beyond SMS spam (banking
-phishing, impersonation, job/advance-fee, delivery, crypto wallet drains, …) therefore
-continue to depend primarily on the deterministic channels — pattern rules, NLP text signals,
-URL analysis, threat intelligence and evidence correlation. The ML signal is one probabilistic
-input, and the risk engine's smallest weight (`0.10`) reflects that. Do **not** treat SMS-only
-training as evidence the model detects every type of scam.
+### 🧠 Evidence-first AI
 
-**LLM.** An optional OpenAI-compatible provider (any base URL — `gpt-4o-mini` by default) is
-used for classification refinement and explanation/report synthesis. It receives **only the
-structured evidence** (`ReportContext`) under an evidence-only prompt contract: it cannot invent
-threat-intelligence results or external facts, it cannot change the risk score, and it cannot
-assert a scam category the deterministic evidence does not support — refinement only picks among
-categories the evidence already implies. Malformed,
-empty or failed LLM output falls back to the deterministic explanation/report
-(`provider = "deterministic-fallback"`). Without a key, the system runs fully deterministic.
+Every channel emits typed `EvidenceSignal` rows (`source`, `signal`, `severity`, `confidence`,
+`description`, `detail`) before any AI runs. The explanation layer is grounded in those rows, so
+"why was this flagged?" is answered from recorded evidence rather than a model's opinion.
 
-### Evaluation
+### 🌐 URL intelligence
 
-Two separate measurement regimes exist, and their numbers must **never** be combined:
+Non-fetching structural analysis: brand lookalikes and homoglyphs (`paypa1.com` → PayPal),
+punycode and IP-literal hosts, dangerous schemes, unusual ports, excessive subdomains,
+credential/phishing paths (`/login`, `/verify`, `/update`), shortener fingerprints, sensitive query
+parameters and missing HTTPS. Findings feed both the risk engine and the URL-anchored normalization
+guard. Engineering detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-| Regime | What it measures | Corpus | Metrics |
-|---|---|---|---|
-| **ML model evaluation** | The classifier alone, on a held-out split of its own training data (never the evaluation corpus) | Real UCI SMS Spam Collection — 5,159 rows, stratified split | F1 0.756, ROC-AUC 0.9707, precision 0.6748, recall 0.8594 (see [Machine Learning](#machine-learning)) |
-| **End-to-end detection calibration** | The whole pipeline (extraction → URL → text → patterns → ML → correlation → risk → report) | 64 **fictional** evaluation cases (24 benign / 40 scam) | Binary F1 1.0, accuracy 1.0, precision 1.0, recall 1.0, category accuracy 1.0, 0 false positives, 0 false negatives |
-
-The 64-case corpus (`backend/data/evaluation/evaluation_cases.json`) is **fictional calibration
-material, not real user data** — it is refused by the training loader, never enters ML metrics,
-and is not representative of real-world prevalence. Real-data ML metrics come only from the
-UCI held-out test split; run both with `scripts/evaluate_detection.py` and
-`scripts/ml_training/train.py`.
-
----
-
-## Risk Scoring
-
-- **Method:** `deterministic_weighted` — component scores × configurable weights, then
-  quality-aware normalization.
-- **Weights:** live in `DEFAULT_WEIGHTS` (`app/risk/engine.py`), JSON-overridable via
-  `RISK_WEIGHTS_PATH`. Current distribution: pattern rules `0.35`, threat intel `0.25`, URL
-  `0.18`, credential/OTP requests `0.12` each, payment requests `0.10`, ML `0.10`, entity
-  impersonation `0.08`, urgency `0.07`, consistency `0.05`.
-- **Bands:** LOW (0–24) · MEDIUM (25–49) · HIGH (50–74) · CRITICAL (75–100).
-- **Evidence sufficiency:** `SUFFICIENT` / `PARTIAL` / `INSUFFICIENT` computed from the
-  applicable evidence pool.
-- **URL-anchored normalization:** when a URL shows strong structural risk (≥ 0.4) or a
-  threat-intel verdict is suspicious/malicious, applicable-but-silent channels drop out of the
-  normalization denominator — a strong lookalike/credential URL next to neutral text keeps its
-  weight instead of being diluted to LOW. An official domain with a benign URL never anchors.
-- **Request-intent gating:** a *mention* of OTP/password/payment never counts as a request
-  unless a requestive verb is present; protective warnings ("never share your OTP") and
-  reassurance ("no action needed") suppress alarm rules — which is what keeps legit 2FA texts,
-  receipts and security notices LOW.
-
----
-
-## Evidence & Explainability
-
-Every investigation stores:
-
-- **Evidence signals** — typed rows with source, signal, severity, confidence, description and
-  structured detail (e.g. `url_analysis / URL_RISK / high / 95%`).
-- **Risk assessment** — score, band, confidence, method, weights, evidence sufficiency and the
-  per-signal contributor list with directional impact.
-- **Report** — summary, likely objective + confidence, suspicious indicators, recommended
-  actions, limitations, and a sectioned full report.
-- **Timeline** — each pipeline stage with its measured duration.
-
-The UI groups evidence by channel (URL, text signals, pattern matches, ML, threat
-intelligence, entities/OCR), explains **"Why this score?"** from the actual contributors, and
-shows **"Why this was flagged"** from the high/critical severity signals.
-
----
-
-## Threat Intelligence
+### 🛰️ Threat intelligence
 
 | Provider | Mode | Notes |
 |---|---|---|
-| `MockThreatIntelProvider` | **Demo (default)** | Deterministic, clearly labeled `[DEMO]`; a fictional blocklist; never double-counts URL structural evidence |
-| Google Safe Browsing | Live (opt-in) | `GOOGLE_SAFE_BROWSING_API_KEY`, sent in the `x-goog-api-key` **header** — never in the URL, so the credential cannot leak into access logs |
-| VirusTotal | Live (opt-in) | `VIRUSTOTAL_API_KEY`, sent in the `x-apikey` header |
+| Google Safe Browsing | Live (env-keyed) | Key sent in the `x-goog-api-key` **header**, never in a URL |
+| VirusTotal | Live (env-keyed) | Key sent in the `x-apikey` header |
+| Demo provider | Default without keys | Deterministic, labelled `[DEMO]`, fictional blocklist |
 
-**Input validation (hard invariant):** a provider only answers for a well-formed absolute
-`http(s)` URL with a real hostname or IP literal (`app/intelligence/base.py::lookupable_url`).
-Malformed input — spaces, a bare label, no scheme, an unparseable IPv6 literal — returns
-`verdict=unknown` with `status=error` **without any API call**, because "not in the blocklist"
-is the answer *every* reputation service gives for a string it cannot check, and reporting that
-as clean would silently lower risk.
+Providers are queried **by URL value only** (no server-side fetching → no SSRF surface) and
+normalised at the boundary. A failure, timeout, rate limit or unusable input becomes
+`verdict=unknown` with a non-`ok` status — **no information**, never a clean verdict, and never a
+reason to lower risk.
 
-All providers normalize at the boundary into `ThreatIntelResult`:
-`provider`, `verdict` (`safe|suspicious|malicious|unknown`), `status`
-(`ok|error|unavailable|rate_limited`), `risk_score`, `reputation`, `categories`, `hits`,
-safe `detail`, `checked_at`, `error`. Raw API payloads never leave the provider code.
+### 🤖 Machine learning
 
-**Failure behavior (hard invariant):** a provider outage/timeout/rate-limit/exception becomes
-`verdict=unknown` with a non-`ok` status — *no information*, never a clean verdict; failures
-never crash an investigation, never lower merged risk, and never add weight to the risk
-denominator. The manager queries configured providers concurrently (worst-verdict-wins) and
-surfaces every per-provider outcome — including failures — so the UI shows exactly who said
-what and who was down.
+A scikit-learn `LogisticRegression` (StandardScaler → LR, `C=0.8`, `class_weight="balanced"`) over
+engineered language/text features, trained on the **real UCI SMS Spam Collection v.1**
+(5,159 messages, CC BY 4.0). It contributes one probability signal at the **smallest weight in the
+engine (`0.10`) and never decides the verdict**.
 
-Providers are queried **by URL only** — no server-side fetching of arbitrary URLs.
+**ML model metrics — held-out UCI test split, `seed=42`** (these measure the *model*, not the
+end-to-end product):
 
----
-
-## URL Analysis
-
-Deterministic, non-fetching structural analysis:
-
-- brand lookalike / homoglyph / punycode impersonation (`paypa1.com` → PayPal)
-- dangerous schemes (`file:`, `javascript:`), IP-literal hosts, unusual ports
-- redirect-heavy structures and URL-shortener fingerprints
-- credential/phishing path indicators (`/login`, `/verify`, `/update`)
-- missing HTTPS / mixed content signals
-
-Each finding emits a structured evidence signal; the aggregate feeds both the risk engine and
-the URL-anchored normalization guard.
-
----
-
-## Text Analysis
-
-Linguistic rule engines over the normalized text:
-
-- **Urgency / fear language** — account suspension, legal action, limited-time threats
-- **Credential / OTP requests** — requestive-verb gated (see [Risk Scoring](#risk-scoring))
-- **Payment requests** — amounts, urgency, non-refundable phrasing
-- **Suspicious instructions** — gift cards, wire transfers, crypto addresses
-- **Impersonation claims** — "we are your bank", "IRS", "CEO"
-
----
-
-## OCR
-
-`OCR_PROVIDER=auto` (default) detects a local `tesseract` binary at startup:
-
-- **Tesseract available** → real OCR of uploaded screenshots via the system `tesseract` binary
-  (invoked as a subprocess; no Python wrapper dependency).
-- **Not available** → a deterministic mock OCR provider that emits a clear warning; the
-  investigation still completes.
-
-Uploads are sniffed with Pillow, size-capped (10 MB default) and dimension-capped; images are
-stored under random names and never sent to any external service.
-
----
-
-## Entity Extraction
-
-The parser extracts and normalizes: **URLs, emails, phone numbers, monetary amounts, company
-names, banks, organizations and dates** — with surrounding context where available. Entities
-are persisted, grouped in the UI, and used by brand-impersonation and request-channel rules.
-
----
-
-## Frontend
-
-Next.js 15 (App Router) + React 19 + TypeScript + Tailwind CSS v3 — a dark cybersecurity SaaS
-interface:
-
-- **Landing page** (`/`) — hero with an animated investigation-network visualization, live
-  preview card, capabilities, pipeline explainer, architecture and security sections.
-- **Dashboard** (`/dashboard`) — live provider/health status strip from `/api/health`, KPI
-  cards (real data only — no fabricated trends), animated risk distribution, demo cases,
-  recent investigations.
-- **Investigate** (`/investigate`) — source selector, message/URL inputs, drag-and-drop
-  screenshot upload, animated processing experience.
-- **Results** (`/results/[id]`) — animated risk gauge, "Why this score?", grouped evidence,
-  threat-intel status per provider, timeline, actions, entities, full report.
-- **History** (`/history`) — search, risk/type filters, pagination, delete.
-
-Provider status is rendered **from `/api/health`** — mock/demo providers display honestly as
-such, and the UI flips to "live" automatically when keys are configured server-side. No API
-keys ever reach the browser.
-
----
-
-## Backend
-
-FastAPI + Pydantic v2 + SQLAlchemy 2 (async) + LangGraph 0.2.x. Key modules under `backend/app/`:
-
-| Module | Responsibility |
+| Metric | Value |
 |---|---|
-| `agents/` | LangGraph nodes (parse, OCR, analyze, intel, ML, correlate, classify, risk, explain, report) |
-| `api/routes/` | `health`, `investigations`, `analyze`, `demo` routers |
-| `analysis/` | Linguistic text-signal rules |
-| `core/` | Config (`pydantic-settings`), logging, rate limiting, upload security |
-| `extraction/` | URL analysis, entity extractor, OCR adapter, text extractor |
-| `graph/` | Typed `InvestigationState` + workflow builder |
-| `intelligence/` | Provider interface, Safe Browsing, VirusTotal, demo provider, manager |
-| `llm/` | Provider interface, OpenAI-compatible client, deterministic fallback, prompt contracts |
-| `ml/` | Features, classifier, service, dataset loader, shipped `.joblib` model |
-| `patterns/` | Scam-rule engine + category taxonomy |
-| `risk/` | Deterministic weighted engine + correlation |
-| `schemas/` | Pydantic API contracts |
-| `services/` | Investigation orchestration, demo cases |
+| Accuracy | 93.12% |
+| Precision | 67.48% |
+| Recall | 85.94% |
+| F1 | 75.60% |
+| ROC-AUC | 97.07% |
+
+The SMS corpus is spam/ham supervision — it does **not** represent the full phishing, URL, crypto,
+impersonation or screenshot threat landscape. See [Evaluation](#evaluation).
+
+### 👁️ OCR investigation
+
+`OCR_PROVIDER=auto` detects the system `tesseract` binary at startup (verified with
+`tesseract v5.5.3.20260724`). Screenshots are sniffed with Pillow, size- and dimension-capped,
+stored under random names, and never sent to an external service. Extracted text flows into the URL,
+text-signal, pattern and aggregation channels exactly like pasted text.
+
+### 🧮 Deterministic risk engine
+
+Component scores × configurable weights, normalised over the channels that were actually applicable
+to the submission — producing a 0–100 score, a band (`LOW` / `MEDIUM` / `HIGH` / `CRITICAL`), a
+confidence, an explicit **evidence-sufficiency** label and a per-signal contributor list. The LLM
+cannot change any of it.
+
+### 🧾 Evidence correlation
+
+Multiple weak signals combine into stronger evidence, while strong evidence is protected from
+dilution:
+
+- **URL-anchored normalization** — when a URL shows strong structural risk (≥ 0.4) or threat intel
+  returns suspicious/malicious, applicable-but-silent channels drop out of the denominator, so a
+  credential-harvesting URL is not diluted by neutral text.
+- **Channel applicability** — a channel that could never fire for this input type (e.g. URL risk on
+  a text-only message) never dilutes the score; an uninformative intelligence answer contributes
+  nothing.
+- **Consistency** — contradictions between channels dampen the score instead of being averaged away.
+
+### 🛡️ Security engineering
+
+Server-side secrets, no SSRF surface, distrust of client-declared content types, bounded uploads,
+decompression-bomb protection, per-IP rate limiting, sanitised filenames, JSON logs that exclude raw
+message bodies, and no `eval`/`exec` anywhere. Details: [Security](#security).
 
 ---
 
-## API
+## Architecture
 
-All endpoints under `/api` (docs at `/docs` when the server runs):
+```mermaid
+flowchart TD
+    U[User] --> FE["Next.js Frontend<br/>landing · dashboard · investigate · history · results"]
+    FE -->|"/api/* proxied"| API["FastAPI API Layer<br/>validation · limits · rate limiting"]
+    API --> SVC["Investigation Service<br/>orchestration · persistence"]
+    SVC --> ORCH{{"LangGraph Orchestrator<br/>typed InvestigationState"}}
 
-| Method | Path | Description |
+    subgraph CH["Parallel analysis channels"]
+        direction TB
+        TEXT["Text Extraction and Normalisation"]
+        URLNODE["URL Analysis"]
+        OCRNODE["OCR, conditional on image presence"]
+        PAT["Scam Pattern Engine"]
+        MLNODE["ML Classifier"]
+        INTEL["Threat Intelligence"]
+    end
+
+    ORCH --> CH
+    TEXT --> CORR["Evidence Correlation<br/>quality-aware weighting"]
+    URLNODE --> CORR
+    OCRNODE --> CORR
+    PAT --> CORR
+    MLNODE --> CORR
+    INTEL --> CORR
+
+    CORR --> RISK["Deterministic Risk Engine<br/>score · band · confidence · sufficiency"]
+    RISK --> LLMN["Grounded LLM Explanation<br/>evidence-only prompt contract"]
+    LLMN --> REP["Report Generator<br/>summary · indicators · actions"]
+    REP --> DB[("SQLite local / PostgreSQL-compatible persistence")]
+    DB --> FE
+```
+
+Engineering invariants enforced in code:
+
+- **Evidence is structured first** — no free-form claims travel between stages.
+- **Risk is deterministic** — reproducible, auditable, regression-tested.
+- **Mocks are labelled** (`is_mock`, `[DEMO]`, provider mode) and surfaced as UI warnings.
+- **Uncertainty is explicit** — sparse inputs report *"low risk based on available evidence — not a
+  verified safe result"* instead of a clean result.
+
+---
+
+## Investigation flow
+
+```mermaid
+flowchart TD
+    SUBMIT([Submission]) --> PARSE["parse<br/>normalise and extract entities"]
+    PARSE --> IMGQ{image present?}
+    IMGQ -->|yes| OCRN["ocr<br/>Tesseract to text"]
+    IMGQ -->|no| ANALYZE["analyze<br/>text signals and pattern rules"]
+    OCRN --> ANALYZE
+
+    ANALYZE --> FAN{{"parallel fan-out"}}
+    FAN -->|"URLs present"| URLN["url_analysis<br/>structural risk"]
+    FAN -->|always| ENTN["entity_analysis<br/>brand impersonation"]
+    FAN -->|always| MLN["ml<br/>classifier probability"]
+    URLN -->|"URLs present"| INTELN["threat_intel<br/>Safe Browsing and VirusTotal"]
+    URLN --> CLASSN["classify_refine<br/>category and alternatives"]
+
+    INTELN --> CORR["correlate<br/>merge and weight evidence"]
+    ENTN --> CORR
+    MLN --> CORR
+    CLASSN --> CORR
+
+    CORR --> RISKN["risk<br/>deterministic score, band, sufficiency"]
+    RISKN --> EXPLAINN["explain<br/>grounded explanation"]
+    EXPLAINN --> REPORTN["report<br/>structured report"]
+    REPORTN --> PERSIST[("persist investigation and timeline")]
+    PERSIST --> DONE([Result])
+
+    INTELN -.->|"provider failure = unknown, never clean"| CORR
+    EXPLAINN -.->|"LLM unavailable: deterministic fallback"| REPORTN
+```
+
+Conditional paths: OCR runs only for image submissions; the URL and threat-intel branches run only
+when URLs are present; provider failures degrade to *no information* rather than a clean verdict;
+and the explanation falls back deterministically when no LLM is configured.
+
+---
+
+## Risk decision model
+
+Five separate concepts, deliberately not conflated:
+
+| Concept | Question it answers | Where it comes from |
 |---|---|---|
-| GET | `/health` | Status + provider/mode summary (LLM, threat intel, ML, OCR, database) |
-| POST | `/investigations` | Create an investigation (multipart: `text`, `urls[]`, `title`, `source_label`, `image`) |
-| GET | `/investigations` | List, paginated + filterable (`search`, `risk_level`, `scam_type`) |
-| GET | `/investigations/{id}` | Full investigation view (risk, evidence, entities, report, timeline) |
-| DELETE | `/investigations/{id}` | Delete an investigation |
-| POST | `/analyze/text` · `/analyze/url` · `/analyze/image` | Channel-specific analyses |
-| GET | `/demo` | List demo cases |
-| POST | `/demo/{slug}` | Run a deterministic demo case end-to-end |
+| **Evidence** | What did we actually observe? | Typed signals emitted by each analysis channel |
+| **Risk** | How dangerous is this, on 0–100? | Deterministic weighted engine over applicable channels |
+| **Confidence** | How much independent evidence backs the assessment? | Volume, source diversity, severity, corroboration, live providers |
+| **Sufficiency** | `INSUFFICIENT` / `PARTIAL` / `SUFFICIENT` | The same evidence pool, reported explicitly |
+| **Explanation** | Why, and what should the user do? | Grounded AI synthesis (or deterministic fallback) |
+
+**Risk bands:** `LOW` 0–24 · `MEDIUM` 25–49 · `HIGH` 50–74 · `CRITICAL` 75–100.
+
+**Channel weights** (`DEFAULT_WEIGHTS`, JSON-overridable via `RISK_WEIGHTS_PATH`): pattern rules
+`0.35` · threat intel `0.25` · URL `0.18` · credential and OTP requests `0.12` each · payment request
+`0.10` · ML `0.10` · suspicious instructions `0.08` · entity impersonation `0.08` · urgency `0.07` ·
+sensitive info `0.07` · consistency `0.05`.
+
+**Request-intent gating.** A *mention* of an OTP, password or payment is not a request: request
+channels require a requestive verb, protective warnings ("never share your OTP") and reassurance
+("no action needed") suppress alarm rules, and status-only delivery wording ("your parcel could not
+be delivered") counts as evidence only when the message also asks for something or applies pressure.
+That is what keeps genuine 2FA texts, receipts and security notices `LOW` while the same wording
+plus a fee demand escalates.
 
 ---
 
-## Data Model
+## Real-time investigation
 
-Tables (SQLite local fallback or PostgreSQL 16 in Docker):
+The application performs **on-demand, live investigations**:
 
-- `investigations` — metadata, status, input types
-- `evidence` — structured signals (source, signal, severity, confidence, description, detail)
-- `extracted_entities` — typed entities with context
-- `analysis_results` — per-branch structured output
-- `risk_assessments` — score, band, confidence, method, weights, sufficiency, contributors
-- `reports` — summary, objective, indicators, recommendations, sections
+1. a user submits evidence (text, URLs, screenshot, or any combination) through the API or UI;
+2. the backend runs the investigation immediately, querying whichever **live providers are
+   configured** (Safe Browsing, VirusTotal, the LLM) alongside the deterministic channels;
+3. evidence is correlated and scored deterministically;
+4. the risk assessment and report are returned in the response and persisted to history.
+
+This is **not** a 24/7 monitoring or streaming platform: there are no background workers, queues,
+scheduled scans or alerting pipelines. Each investigation is a synchronous request whose latency is
+dominated by the live provider calls it makes.
 
 ---
 
 ## Evaluation
 
-A 64-case end-to-end corpus (`data/evaluation/evaluation_cases.json`) pins calibration:
-`scripts/evaluate_detection.py` runs every case through the full pipeline and reports binary +
-category + band metrics.
+Two measurement regimes exist and their numbers must **never** be combined.
+
+### Section A — end-to-end calibration corpus
+
+`backend/data/evaluation/evaluation_cases.json` holds **64 fictional cases** (24 benign including
+9 hard negatives, 40 scam across 13 labelled categories plus 2 intentionally unlabelled).
+`scripts/evaluate_detection.py` runs every case through the **real API pipeline** (mock LLM + mock
+threat intel, the shipped ML model) and reports binary, category and band metrics.
 
 | Metric | Value |
 |---|---|
-| Cases | 64 (24 benign / 40 scam) |
+| Cases | 64 — 24 benign / 40 scam (45 text, 11 URL, 8 text+URL) |
+| Confusion matrix | TP 40 · FP 0 · FN 0 · TN 24 |
 | Accuracy | **100%** |
 | Precision | **100%** |
 | Recall | **100%** |
 | F1 | **100%** |
 | Category accuracy | **100%** (40/40) |
 | Band compliance | **40/40** |
-| False positives | **0** |
-| False negatives | **0** (the previous documented hard case is detected) |
+| Errors | 0 |
 
-> These numbers measure the **evaluation corpus** — not a claim of real-world detection rates.
-> The corpus is small, fictional and run with **mock** LLM/threat-intel providers, so a clean
-> sweep is a *calibration* result (every documented failure mode now lands in the right band),
-> not evidence of real-world accuracy. The tiered metrics below are what a deployment should
-> be judged on.
-
----
-
-## Testing
-
-| Suite | Command | Result |
+| Input type | Accuracy | Confusion |
 |---|---|---|
-| Backend unit/integration | `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` | **180 passed**, 11 skipped (opt-in live suites) |
-| Live threat-intel / LLM (opt-in) | `RUN_LIVE_INTEL_TESTS=1` / `RUN_LIVE_LLM_TESTS=1` | requires real API keys |
-| Live OCR (opt-in) | `RUN_LIVE_OCR_TESTS=1 … -m pytest tests/test_ocr_live.py -q` | **7 passed** with a system Tesseract |
-| Evaluation harness | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64-case corpus |
-| E2E smoke | `.venv/Scripts/python.exe scripts/end_to_end_smoke.py` | 12/12 flows |
-| Frontend typecheck | `cd frontend && npm run typecheck` | PASS |
-| Frontend build | `npm run build` | PASS |
+| Text | 1.00 | TP 28 · FP 0 · FN 0 · TN 17 |
+| URL only | 1.00 | TP 6 · FP 0 · FN 0 · TN 5 |
+| Text + URL | 1.00 | TP 6 · FP 0 · FN 0 · TN 2 |
 
-**The offline suites are hermetic.** `tests/conftest.py` pins every provider to its deterministic
-mock implementation, so a developer's local `backend/.env` with real keys can *never* turn `pytest`
-into a live-network run or shift the calibration assertions. `scripts/evaluate_detection.py` blanks
-the provider keys for the same reason. Only the explicitly opt-in `RUN_LIVE_*` suites use the
-network.
+> ⚠️ This is a **calibration / regression** result on 64 fictional cases with mock providers — it is
+> **not** a real-world detection-accuracy claim. Its purpose is to keep documented failure modes
+> fixed: every case is a frozen regression, benign hard negatives (legitimate OTP warnings, receipts,
+> carrier tracking notices, security disclaimers) must stay `LOW`, and a regression fails the suite.
+> The corpus declares its own hard cases (`hard_negatives`, `hard_positives`) so the adversarial
+> cases are visible rather than implied.
 
-`npm run lint` is **not** a usable gate in this repository: `next lint` opens an interactive prompt
-to configure ESLint (no config file or ESLint dependency is committed). `typecheck` and `build` are
-the enforced frontend checks; lint configuration was deliberately not added just to report a pass.
+### Section B — ML held-out evaluation
 
----
+The classifier alone, on a stratified held-out test split of its own real training corpus
+(UCI SMS Spam Collection v.1 — 5,159 rows, `seed=42`, split 3,611 / 516 / 1,032, decision threshold
+`0.55`):
 
-## Security
+| Metric | Value |
+|---|---|
+| Accuracy | 93.12% |
+| Precision | 67.48% |
+| Recall | 85.94% |
+| F1 | 75.60% |
+| ROC-AUC | 97.07% |
 
-- **No secrets in the frontend** — API keys are read server-side from environment variables
-  only; the UI shows provider *status*, never values.
-- **No SSRF surface** — the engine analyzes URL *structure*; it never fetches arbitrary URLs.
-- **Safe uploads** — Pillow content sniffing, 10 MB size cap, dimension caps, sanitized
-  random filenames, restricted storage.
-- **Rate limiting** — per-IP limit on investigation creation (`RATE_LIMIT_PER_MINUTE`, default 30).
-- **Input limits** — 50 000-char text cap, 20 URLs per submission.
-- **Fail-safe providers** — outages are no-information, never clean verdicts.
-- **`.env` ignored** — `.env.example` ships with placeholders only.
+A separate full-corpus sanity run (`scripts/ml_training/evaluate.py`, which applies the shipped model
+to all 5,159 rows rather than to a held-out split) reports accuracy 0.9353 · precision 0.6920 ·
+recall 0.8645 · F1 0.7687 · ROC-AUC 0.9741. It is a diagnostic, not a generalisation estimate.
 
----
+**Honest limits of the real corpus.** The UCI set is SMS spam/ham supervision: 13% scam prevalence,
+English-only, no URL-bearing rows at all. Categories beyond SMS spam (banking phishing,
+impersonation, job/advance-fee, delivery, crypto wallet drains…) therefore depend primarily on the
+deterministic channels. SMS-only training is **not** evidence that the model detects every type of
+scam.
 
-## Installation
-
-**Prerequisites:** Python 3.13, Node.js ≥ 20.
-
-```bash
-# 1. Backend
-cd backend
-python -m venv .venv
-.venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
-# .venv/bin/pip install -r requirements.txt                   # macOS/Linux
-
-# 2. Frontend
-cd ../frontend
-npm install
-```
-
-**Docker (PostgreSQL + backend + frontend):**
-
-```bash
-cp .env.example .env    # optional — demo mode works without it
-docker compose up --build
-```
-
-**Run without Docker:**
-
-```bash
-# terminal 1 — backend
-cd backend
-.venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
-
-# terminal 2 — frontend
-cd frontend
-npm run dev              # http://localhost:3000
-```
-
-The Next dev server proxies `/api/*` to `http://localhost:8000` (`BACKEND_URL` overrides).
-
----
-
-## Configuration
-
-All settings are environment variables (see `backend/app/core/config.py` and `.env.example`):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `DATABASE_URL` | SQLite local | PostgreSQL under docker-compose |
-| `LLM_PROVIDER` | `mock` | `mock` \| `openai_compatible` |
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | — / — / `gpt-4o-mini` | Live LLM |
-| `GOOGLE_SAFE_BROWSING_API_KEY` | — | Live Safe Browsing |
-| `VIRUSTOTAL_API_KEY` | — | Live VirusTotal |
-| `LLM_TIMEOUT_SECONDS` | `45` | LLM request timeout |
-| `THREAT_INTEL_TIMEOUT_SECONDS` | `10` | Provider timeout |
-| `OCR_PROVIDER` | `auto` | `auto` \| `tesseract` \| `mock` |
-| `TESSERACT_BINARY` | `tesseract` | OCR binary name |
-| `OCR_MAX_IMAGE_MB` | `10` | OCR image cap |
-| `MAX_UPLOAD_MB` / `MAX_TEXT_LENGTH` / `MAX_URLS_PER_SUBMISSION` | `10` / `50000` / `20` | Input limits |
-| `RATE_LIMIT_PER_MINUTE` | `30` | API rate limit |
-| `CORS_ORIGINS` | `http://localhost:3000` | Allowed browser origins |
-| `RISK_WEIGHTS_PATH` | — | Optional JSON weight overrides |
-| `ML_MODEL_PATH` | shipped `.joblib` | Classifier artifact |
-| `ML_DECISION_THRESHOLD` | `0.55` | Model label threshold (validated on the UCI validation split) |
-| `RUN_LIVE_INTEL_TESTS` / `RUN_LIVE_LLM_TESTS` / `RUN_LIVE_OCR_TESTS` | — | Opt-in live tests (never in CI) |
-
----
-
-## Usage
-
-1. Open **http://localhost:3000**.
-2. **Dashboard** → run a sample investigation, or **New investigation** → paste a message,
-   add URLs, or drop a screenshot.
-3. Watch the pipeline complete and review the result: risk gauge, "Why this score?",
-   grouped evidence, threat-intel status, timeline, recommended actions.
-4. Revisit any investigation from **History** (search + filters included).
-
-In demo mode everything runs locally and deterministically — no API keys, no external calls.
-
----
-
-## Demo Mode
-
-Without any credentials the application runs in **DEMO mode**:
-
-- LLM → deterministic local explanations (`LLM_PROVIDER=mock`)
-- Threat intel → labeled demo provider (`[DEMO]`, fictional blocklist)
-- OCR → mock (if no Tesseract binary is found)
-- ML → the real-data-trained LogisticRegression model (the *external providers* are the only mock components)
-- Database → SQLite local file
-
-The health endpoint and dashboard report `demo_mode: true` and every mock artifact is visibly
-labeled — the UI never presents demo output as live verification. 11 fictional sample cases
-(fake bank KYC, job offer, investment, delivery fee, lottery, tech support, romance, account
-takeover, crypto wallet drain, suspicious URL, plus a benign control) run the real pipeline
-end-to-end.
-
----
-
-## Production Providers
-
-Configure server-side environment variables to move to live mode — the UI reflects the change
-automatically via `/api/health`:
-
-```bash
-# Threat intelligence
-GOOGLE_SAFE_BROWSING_API_KEY=...
-VIRUSTOTAL_API_KEY=...
-
-# LLM (OpenAI-compatible, any base URL)
-LLM_PROVIDER=openai_compatible
-LLM_API_KEY=...
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4o-mini
-
-# OCR
-OCR_PROVIDER=tesseract      # requires the tesseract binary on the host
-```
-
-Live tests: `RUN_LIVE_INTEL_TESTS=1` and/or `RUN_LIVE_LLM_TESTS=1` with `pytest`.
+**Separation is enforced in code**, not merely documented: `app/ml/dataset.py` refuses to load
+anything under `data/evaluation/` and rejects rows whose ids overlap evaluation cases.
 
 ---
 
 ## Live integration status
 
-What was **actually executed** against real providers (not inferred from configuration). Every
-row below is reproducible with the commands in [Testing](#testing).
+What was **actually executed** against real providers — not inferred from configuration.
 
 | Integration | Status | Evidence |
 |---|---|---|
-| Google Safe Browsing | **CONNECTED** | Live `threatMatches:find` calls succeed. Benign `https://example.com/` → `safe` / `ok`. Google's own documented v4 fixtures (`testsafebrowsing.appspot.com/apiv4/ANY_PLATFORM/{MALWARE,SOCIAL_ENGINEERING}/URL/`) → `malicious` / `ok` with the expected category preserved. Invalid key → `unknown` / `error` (HTTP 400). Malformed input → `unknown` / `error` with **no** HTTP call. |
-| VirusTotal | **CONNECTED** | Live `/urls/{id}` lookups succeed. `https://example.com/` and `https://www.wikipedia.org/` → `safe` / `ok`, 0 hits. Unseen URL → `unknown` (HTTP 404, "not seen", *not* clean). Invalid key → `unknown` / `error` (HTTP 401). Public lookups spaced to respect the rate limit; a 429 maps to `rate_limited`. |
-| Gemini / LLM | **CONNECTED** | `LLM_PROVIDER=openai_compatible` against Gemini's OpenAI-compatible endpoint. Live explanation, report and classification refinement returned grounded, non-mock output that referenced only evidence present in the context (no invented URLs, brands, organizations or amounts). A provider failure (HTTP 404/503) falls back to the deterministic explanation/report — the investigation still completes. |
-| Tesseract OCR | **CONNECTED** | `tesseract v5.5.3.20260724` discovered without an absolute path. A generated phishing screenshot uploaded to `POST /api/analyze/image` extracted 32 words, the embedded URL was analyzed, and the case scored **HIGH 59.4**; a benign notification screenshot scored **LOW 1.8**. A blank/unreadable image returns empty text + an explicit error rather than fabricated text. |
-| SQLite (local) | **VERIFIED** | Create / retrieve / history / filters / pagination / delete exercised over HTTP; missing and malformed ids return 404. |
-| PostgreSQL | **NOT CONFIGURED / NOT REQUIRED FOR LOCAL** | The server is not installed here; SQLite is the documented local store. `DATABASE_URL` + `docker-compose.yml` carry the PostgreSQL path. |
-| Docker | **NOT VERIFIED** | The Docker CLI is not installed in this environment, so `docker compose config/build/up` were not run. The Dockerfiles and compose file are unchanged. |
+| Google Safe Browsing | **CONNECTED** | Live `threatMatches:find` succeeds. Benign `https://example.com/` → `safe`/`ok`; Google's documented v4 test fixtures → `malicious`/`ok` with the expected category; invalid key → `unknown`/`error` (HTTP 400); malformed input → `unknown`/`error` with **no** HTTP call |
+| VirusTotal | **CONNECTED** | Live `/urls/{id}` lookups succeed. Benign URLs → `safe`/`ok`, 0 hits; unseen URL → `unknown` (HTTP 404, "not seen" — *not* clean); invalid key → `unknown`/`error` (HTTP 401); rate limit → `rate_limited` |
+| Gemini / LLM | **CONNECTED** | `LLM_PROVIDER=openai_compatible` against Gemini's OpenAI-compatible endpoint. Live explanation, report and classification refinement returned grounded, non-mock output referencing only evidence present in the context |
+| Tesseract OCR | **CONNECTED** | `tesseract v5.5.3.20260724` discovered without an absolute path. A generated phishing screenshot through `POST /api/analyze/image` extracted 32 words, its embedded URL was analysed, and the case scored **HIGH 59.4**; a benign notification screenshot scored **LOW 1.8**; a blank image returns empty text plus an explicit error, never fabricated text |
+| SQLite (local) | **VERIFIED** | Create / retrieve / history / filters / pagination / delete exercised over HTTP; missing and malformed ids return 404 |
+| PostgreSQL | **NOT CONFIGURED LOCALLY** | Not installed in this environment; SQLite is the verified local store. `DATABASE_URL` plus `docker-compose.yml` carry the PostgreSQL path (engine-portable filters are implemented, but that path was not executed here) |
+| Docker | **NOT VERIFIED** | The Docker CLI is not installed in this environment, so `docker compose config/build/up` were not run. The Dockerfiles and compose file are unchanged and untested here |
+| Cloud deployment | **NOT PERFORMED** | No frontend or backend deployment exists; [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) documents the intended paths |
 
-**Provider/model note.** Google has closed `gemini-2.5-flash` to new API keys and returned 503
-(overloaded) for several `*-flash` tiers during verification, so a lighter tier
-(`gemini-3.5-flash-lite`) is configured. Any OpenAI-compatible endpoint works — the model is a
-single environment variable and is never hardcoded.
+### Historical live acceptance run
 
----
+Ten scenarios were submitted through the **running application's own HTTP API** with live Safe
+Browsing, live VirusTotal, live Gemini and real Tesseract OCR active — no layer bypassed, no expected
+score hardcoded. Recorded outcomes (kept exactly as observed):
 
-## Live end-to-end acceptance run
+| # | Scenario | Risk | Score | Classified as |
+|---|---|---|---|---|
+| 1 | Bank account suspension phishing | MEDIUM | 38.0 | `banking_scam` |
+| 2 | Fake job + advance payment | MEDIUM | 46.6 | `job_scam` |
+| 3 | Fake delivery + payment request | MEDIUM | 37.9 | `delivery_scam` |
+| 4 | Crypto/investment "guaranteed returns" | LOW | 9.2 | `crypto_scam` |
+| 5 | CEO impersonation + gift cards | MEDIUM | 28.2 | `impersonation_scam` |
+| 6 | Lookalike URL only | **HIGH** | 64.2 | `phishing` |
+| 7 | Legitimate OTP message | LOW | 5.7 | `unknown` |
+| 8 | Legitimate receipt | LOW | 17.7 | `delivery_scam` (label only) |
+| 9 | Sparse message ("Check this.") | LOW | 0.1 | `unknown` |
+| 10 | Suspicious text + lookalike URL | **HIGH** | 67.8 | `banking_scam` |
 
-Ten scenarios submitted through the **running application's own HTTP API** (`POST
-/api/investigations`) with live Google Safe Browsing, live VirusTotal, live Gemini and real
-Tesseract OCR active — no layer bypassed, no expected score hardcoded. Observed outcomes:
+Every case completed with status `completed`, explanations were live and grounded, and threat
+intelligence reported real per-provider outcomes (Safe Browsing `safe`/`ok`; VirusTotal
+`unknown`/`ok` for the RFC-2606 `.example` fixtures — never a fabricated detection).
 
-| # | Scenario | Risk | Score | Classified as | Evidence sufficiency |
-|---|---|---|---|---|---|
-| 1 | Bank account suspension phishing | MEDIUM | 38.0 | `banking_scam` | SUFFICIENT |
-| 2 | Fake job + advance payment | MEDIUM | 46.6 | `job_scam` | SUFFICIENT |
-| 3 | Fake delivery + payment request | MEDIUM | 37.9 | `delivery_scam` | SUFFICIENT |
-| 4 | Crypto/investment "guaranteed returns" | LOW | 9.2 | `crypto_scam` | PARTIAL |
-| 5 | CEO/executive impersonation + gift cards | MEDIUM | 28.2 | `impersonation_scam` | SUFFICIENT |
-| 6 | Lookalike URL only | **HIGH** | 64.2 | `phishing` | SUFFICIENT |
-| 7 | Legitimate OTP message | LOW | 5.7 | `unknown` | INSUFFICIENT |
-| 8 | Legitimate receipt | LOW | 17.7 | `delivery_scam` (label only) | PARTIAL |
-| 9 | Sparse message ("Check this.") | LOW | 0.1 | `unknown` | INSUFFICIENT |
-| 10 | Suspicious text + lookalike URL | **HIGH** | 67.8 | `banking_scam` | SUFFICIENT |
+**Both issues this run surfaced have since been fixed in the deterministic engine** (the run itself
+was not re-executed, so its numbers stand as observed):
 
-Every case completed (`status=completed`), the LLM explanation was live and grounded, and threat
-intelligence reported real per-provider outcomes (Safe Browsing `safe`/`ok`, VirusTotal
-`unknown`/`ok` for the RFC-2606/`.example` fixtures used — never a fabricated detection).
-
-The table above is the **historical** record of that live run, kept exactly as observed.
-
-**Both observations it raised have since been fixed in the deterministic engine** (the run itself
-was not re-executed, so its numbers are unchanged):
-
-- **Case 4 was a calibration gap** — "Guaranteed 40% returns in 7 days… double your investment
-  risk-free" scored **LOW 9.2** because the rule engine's keyword matcher is literal, so
-  `guaranteed 40% returns` (a token between the two keywords of `guaranteed returns`) and the
-  hyphenated `risk-free` (the rule had `risk free`) never matched. The matcher now also evaluates
-  declarative **regex variants** per rule (`ScamRule.patterns`) plus numeric pressure/reward
-  signals, so the same sentence scores **MEDIUM 38.7** and is classified `investment_scam` by the
-  deterministic rules alone — no LLM refinement required. Because the matcher also feeds the
-  model's `scam_keyword_hits` feature, the tracked artifact was retrained and re-validated on the
-  same real UCI corpus (identical held-out metrics: accuracy 0.9312, F1 0.7560, ROC-AUC 0.9707).
-- **Case 8's label was imprecise** — a legitimate receipt mentioning "parcel" was labelled
-  `delivery_scam` while the risk band correctly stayed LOW. Status-only delivery rules now carry
-  `requires_request_context`: "your parcel could not be delivered" is evidence only when the
-  message also *asks* for something or applies pressure (payment, credential/OTP, sensitive data,
-  an instruction, urgency or a threat). The receipt now scores **LOW 2.9 / `unknown`**, while a
-  real fee demand (`Pay the $2.99 redelivery fee within 24 hours`) still reaches **MEDIUM 35.6
-  / `delivery_scam`**, and a genuine carrier notice with an official tracking link stays LOW.
-  The label is also protected from a *live* model: classification refinement decides only
-  **which** scam an ambiguous case is, so when no rule matched and nothing was requested the
-  LLM's proposed category is recorded as a rejected suggestion
-  (`classification_suggestion_rejected`) instead of replacing the honest `unknown` (previously a
-  live Gemini run relabelled the same receipt `delivery_scam`).
+- **Case 4 was a calibration gap.** The rule matcher compared literal keyword strings with word
+  boundaries, so `guaranteed 40% returns` (a token *inside* the keyword `guaranteed returns`) and the
+  hyphenated `risk-free` (the rule held `risk free`) never matched, and the case fell to LOW on the
+  ML channel alone. Rules now also evaluate declarative **regex variants** (`ScamRule.patterns`) over
+  the normalised text, with numeric pressure/reward signals: the same sentence now scores
+  **MEDIUM 38.7** and is classified `investment_scam` by the deterministic rules alone. Because the
+  matcher also feeds the model's `scam_keyword_hits` feature, the tracked artifact was retrained and
+  re-validated on the same UCI corpus (identical held-out metrics).
+- **Case 8's label was imprecise.** A legitimate receipt mentioning "parcel" was labelled
+  `delivery_scam` while the band correctly stayed LOW. Status-only delivery rules now require scam
+  context (`requires_request_context`): "your parcel could not be delivered" is evidence only when
+  the message also asks for something or applies pressure. The receipt now scores **LOW 2.9 /
+  `unknown`**, while a genuine fee demand ("Pay the $2.99 redelivery fee within 24 hours") still
+  reaches **MEDIUM 35.6 / `delivery_scam`** and a real carrier notice with an official tracking link
+  stays LOW. A live LLM can no longer override this: refinement only chooses *which* scam an
+  ambiguous case is, so when no deterministic evidence supports a category the model's suggestion is
+  recorded as rejected (`classification_suggestion_rejected`) instead of replacing the honest
+  `unknown` verdict.
 
 ---
 
-## Deployment
+## UI and product
 
-Full instructions — Vercel (frontend), Railway/Render or any container host (backend), managed
-PostgreSQL, provider keys, CORS, health check, post-deploy smoke test and troubleshooting — are in
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+Next.js 15 App Router + React 19 + TypeScript + Tailwind — a dark cybersecurity console:
 
-The short version: the frontend needs only `BACKEND_URL`; the backend needs `DATABASE_URL`, the
-provider keys and the LLM settings; API keys are server-side only and must never be exposed to the
-browser.
+| Route | Purpose |
+|---|---|
+| `/` | Landing page — hero, live preview card, capabilities, pipeline explainer, architecture and security sections |
+| `/dashboard` | Provider/health strip from `/api/health`, KPI cards (**real data only, no fabricated trends**), risk distribution, demo cases, recent investigations |
+| `/investigate` | New investigation — source selector, message/URL inputs, drag-and-drop screenshot upload, live processing experience |
+| `/results/[id]` | Risk gauge, **"Why this score?"** from actual contributors, grouped evidence, per-provider threat-intel status, timeline, recommended actions, entities, full report |
+| `/history` | Search, risk-level and scam-type filters, pagination, delete |
+
+Provider status is rendered **from `/api/health`**: mock/demo providers display honestly as such, and
+the UI flips to "live" automatically once keys are configured server-side. **No API key ever reaches
+the browser.**
 
 ---
 
-## Project Structure
+## Product preview
+
+The interface is a working Next.js application (`/`, `/dashboard`, `/investigate`, `/results/[id]`,
+`/history`). No screenshots are committed to this repository: none were fabricated, and no image
+links below would resolve.
+
+<!-- Add real captures here once available:
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard with live provider status and risk distribution" width="720">
+  <img src="docs/screenshots/results.png" alt="Investigation result with risk gauge and grouped evidence" width="720">
+</p>
+-->
+
+To add them: capture the running app, commit the files under `docs/screenshots/`, then uncomment the
+block above. Until then, run it locally with [Quick start](#quick-start) — `npm run dev` in
+`frontend/` with the backend on port 8000.
+
+---
+
+## Quick start
+
+**Prerequisites:** Python 3.13 and Node.js ≥ 20. Nothing else is required — demo mode runs fully
+offline and deterministically.
+
+```bash
+# 1. Clone
+git clone https://github.com/udayrastogi0531/Ai-digital-scam-investigator.git
+cd Ai-digital-scam-investigator
+
+# 2. Backend environment
+cd backend
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
+# .venv/bin/pip install -r requirements.txt                   # macOS / Linux
+
+# 3. Frontend dependencies
+cd ../frontend
+npm install
+```
+
+```bash
+# 4. Run — terminal 1 (backend)
+cd backend
+.venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
+#   → interactive API docs at http://localhost:8000/docs
+
+# 5. Run — terminal 2 (frontend)
+cd frontend
+npm run dev                      # http://localhost:3000
+```
+
+The Next dev server proxies `/api/*` to `http://localhost:8000` (`BACKEND_URL` overrides the target),
+so the browser only ever talks to the frontend origin. API keys are optional: copy `.env.example` to
+`backend/.env` and fill in whichever providers you have.
+
+**Docker (PostgreSQL + backend + frontend)** — configuration is included but **unverified here**
+(no Docker CLI in this environment):
+
+```bash
+cp .env.example .env      # optional — demo mode works without it
+docker compose up --build
+```
+
+---
+
+## Environment variables
+
+Names and defaults only — never values. Full reference: `backend/app/core/config.py` and
+`.env.example`. `backend/.env` is git-ignored and must never be committed.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_URL` | SQLite local file | `postgresql+asyncpg://…` for the PostgreSQL path |
+| `LLM_PROVIDER` | `mock` | `mock` \| `openai_compatible` |
+| `LLM_API_KEY` | — | Live LLM credential (server-side only) |
+| `LLM_BASE_URL` | — | Any OpenAI-compatible `/v1` base |
+| `LLM_MODEL` | `gpt-4o-mini` | Model name (never hardcoded in source) |
+| `LLM_TIMEOUT_SECONDS` | `45` | LLM request timeout |
+| `GOOGLE_SAFE_BROWSING_API_KEY` | — | Live Safe Browsing (`x-goog-api-key` header) |
+| `VIRUSTOTAL_API_KEY` | — | Live VirusTotal (`x-apikey` header) |
+| `THREAT_INTEL_TIMEOUT_SECONDS` | `10` | Provider timeout |
+| `OCR_PROVIDER` | `auto` | `auto` \| `tesseract` \| `mock` |
+| `TESSERACT_BINARY` | `tesseract` | Binary name or path |
+| `OCR_MAX_IMAGE_MB` | `10` | OCR image size cap |
+| `MAX_UPLOAD_MB` | `10` | Upload size cap |
+| `MAX_TEXT_LENGTH` | `50000` | Text input cap (characters) |
+| `MAX_URLS_PER_SUBMISSION` | `20` | URL count cap |
+| `RATE_LIMIT_PER_MINUTE` | `30` | Per-IP limit on investigation creation |
+| `CORS_ORIGINS` | `http://localhost:3000` | Allowed browser origins (unnecessary when the proxy is used) |
+| `ML_MODEL_PATH` | bundled `.joblib` | Classifier artifact path |
+| `ML_DECISION_THRESHOLD` | `0.55` | Model label threshold (validated on the UCI validation split) |
+| `RISK_WEIGHTS_PATH` | — | Optional JSON overrides for risk weights |
+| `DEBUG` | `false` | Leave `false` outside local development |
+| `BACKEND_URL` | `http://localhost:8000` | Frontend → backend proxy target (frontend service) |
+| `RUN_LIVE_INTEL_TESTS` / `RUN_LIVE_LLM_TESTS` / `RUN_LIVE_OCR_TESTS` | — | Opt-in live test switches (never set in CI) |
+
+---
+
+## API
+
+All routes are mounted under `/api` (interactive docs at `/docs` while the server runs).
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Status + provider/mode summary (LLM, threat intel, ML, OCR, database) |
+| `POST` | `/api/investigations` | Create an investigation — multipart: `text`, `urls[]`, `title`, `source_label`, `image` (rate-limited) |
+| `GET` | `/api/investigations` | List investigations — paginated and filterable (`search`, `risk_level`, `scam_type`) |
+| `GET` | `/api/investigations/{id}` | Full investigation view — risk, evidence, entities, report, timeline |
+| `DELETE` | `/api/investigations/{id}` | Delete an investigation (`204`) |
+| `POST` | `/api/analyze/text` | Text-only analysis |
+| `POST` | `/api/analyze/url` | URL-only analysis |
+| `POST` | `/api/analyze/image` | Screenshot analysis (OCR → pipeline) |
+| `GET` | `/api/demo` | List the built-in demo cases |
+| `POST` | `/api/demo/{slug}` | Run a deterministic demo case end-to-end |
+
+---
+
+## Testing
+
+| Suite | Command (from `backend/`) | Verified result |
+|---|---|---|
+| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **180 passed**, 11 skipped |
+| Detection calibration | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64 cases · F1 1.0 · 0 FP · 0 FN · band 40/40 · 0 errors |
+| End-to-end smoke | `.venv/Scripts/python.exe scripts/end_to_end_smoke.py` | **12/12** flows |
+| ML training + held-out report | `.venv/Scripts/python.exe scripts/ml_training/train.py --dataset data/datasets/real/sms_spam_uci.csv --no-categories` | metrics in [Evaluation](#evaluation) |
+| ML full-corpus sanity | `.venv/Scripts/python.exe scripts/ml_training/evaluate.py --dataset data/datasets/real/sms_spam_uci.csv` | accuracy 0.9353 · F1 0.7687 · ROC-AUC 0.9741 |
+| Frontend typecheck (`from frontend/`) | `npm run typecheck` | PASS |
+| Frontend build (`from frontend/`) | `npm run build` | PASS — every app route compiles and prerenders |
+| Live threat intel + LLM (opt-in) | `RUN_LIVE_INTEL_TESTS=1 RUN_LIVE_LLM_TESTS=1 … -m pytest tests/test_threat_intel_live.py -q` | 4 passed with real keys |
+| Live OCR (opt-in) | `RUN_LIVE_OCR_TESTS=1 … -m pytest tests/test_ocr_live.py -q` | 7 passed with system Tesseract |
+
+**The offline suites are hermetic.** `tests/conftest.py` pins every provider to its deterministic
+mock implementation, so a developer's `backend/.env` containing real keys can *never* turn `pytest`
+into a live-network run or shift the calibration assertions; `scripts/evaluate_detection.py` blanks
+the provider keys for the same reason. Only the explicitly opt-in `RUN_LIVE_*` suites use the
+network.
+
+`npm run lint` is **not** a usable gate here: `next lint` opens an interactive prompt to configure
+ESLint, and no ESLint config or dependency is committed. `typecheck` and `build` are the enforced
+frontend checks — lint configuration was deliberately not added just to report a passing badge.
+
+---
+
+## Security
+
+| Control | Implementation |
+|---|---|
+| **No SSRF surface** | URLs are analysed structurally and sent to reputation providers **by value**; the application never fetches user-supplied URLs |
+| **Server-side secrets** | Provider keys are read from the backend environment only. There is no `NEXT_PUBLIC_*` variable, and the UI displays provider *status*, never values |
+| **Credential hygiene in requests** | Keys travel in headers (`x-goog-api-key`, `x-apikey`), never as URL query parameters, so they cannot leak into proxy or access logs |
+| **Upload validation** | The declared content type is not trusted: bytes are sniffed and decoded with Pillow, and unreadable files are rejected |
+| **Size and dimension caps** | `MAX_UPLOAD_MB` (10 MB) enforced via a bounded read, plus a pixel-count cap for decompression-bomb protection |
+| **Safe storage** | Uploaded images are stored under `uuid4` filenames in a git-ignored directory; the client filename is sanitised and never used as a path |
+| **Input limits** | `MAX_TEXT_LENGTH` (50,000 characters) and `MAX_URLS_PER_SUBMISSION` (20) |
+| **Rate limiting** | Per-IP sliding-window limit on `POST /api/investigations` (`RATE_LIMIT_PER_MINUTE`, default 30), `x-forwarded-for`-aware |
+| **Provider fail-safety** | Outages, timeouts, rate limits and unusable inputs are *no information* — never a clean verdict, and never a reason to lower risk |
+| **Logging hygiene** | Structured JSON logs deliberately exclude raw message bodies; HTTP-client request logging is silenced where credentials could appear in a URL |
+| **No dynamic execution** | No `eval`, `exec` or shell interpolation of user content anywhere in the codebase |
+| **Secret containment** | `.env` is git-ignored (all variants); `.env.example` ships placeholders only |
+
+No "100% secure" claim is made: this is a local, single-tenant, self-hosted application without
+authentication or multi-user isolation — see [Limitations](#limitations).
+
+---
+
+## Demo mode and going live
+
+Without credentials the app runs in **DEMO mode**, fully offline and deterministic:
+
+| Component | Demo behaviour |
+|---|---|
+| LLM | Deterministic local explanations (`LLM_PROVIDER=mock`) |
+| Threat intel | Labelled `[DEMO]` provider with a fictional blocklist |
+| OCR | Mock provider when no Tesseract binary is found (clearly warned) |
+| ML | The **real-data-trained** model — only the external providers are mocked |
+| Database | SQLite local file |
+
+The health endpoint and dashboard report `demo_mode: true` and every mock artefact is visibly
+labelled. **11 fictional demo cases** (fake bank KYC, job offer, investment, delivery fee, lottery,
+tech support, romance, account takeover, crypto wallet drain, suspicious URL, plus a benign control)
+run the real pipeline end-to-end.
+
+To go live, set environment variables on the **backend** service — the UI reflects the change
+automatically through `/api/health`:
+
+```bash
+GOOGLE_SAFE_BROWSING_API_KEY=...        # live threat intel
+VIRUSTOTAL_API_KEY=...                  # live threat intel
+LLM_PROVIDER=openai_compatible          # live explanations + grounded refinement
+LLM_API_KEY=...
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_MODEL=gemini-3.5-flash-lite
+```
+
+Any OpenAI-compatible endpoint works; the model is a single environment variable and is never
+hardcoded. (Google closed `gemini-2.5-flash` to new API keys during verification, which is why a
+lighter tier was configured.)
+
+---
+
+## Data model and persistence
+
+SQLite is the verified local store; the same schema runs on PostgreSQL through the async SQLAlchemy
+layer (engine-portable filters are implemented for both).
+
+| Table | Contents |
+|---|---|
+| `investigations` | Metadata, status, input types, timestamps |
+| `evidence` | Structured signals (source, signal, severity, confidence, description, detail) |
+| `extracted_entities` | Typed entities with context and metadata |
+| `analysis_results` | Per-branch structured output |
+| `risk_assessments` | Score, band, confidence, method, weights, sufficiency, contributors |
+| `reports` | Summary, objective, indicators, recommended actions, sections |
+
+Schema creation happens on startup (`create_tables()` in the FastAPI lifespan) and is idempotent for
+a fresh database; there is no migration framework in this repository.
+
+---
+
+## Project structure
 
 ```text
-backend/
-  app/
-    agents/          LangGraph nodes
-    analysis/        text-signal rules
-    api/routes/      FastAPI routers
-    core/            config, logging, security, rate limiting
-    extraction/      URL analysis, entities, OCR, text
-    graph/           typed state + workflow builder
-    intelligence/    threat-intel providers + manager
-    llm/             LLM providers + prompt contracts
-    ml/              features, classifier, dataset loader, model
-    patterns/        scam rules + taxonomy
-    risk/            deterministic engine + correlation
-    schemas/         Pydantic contracts
-    services/        investigation orchestration
-  data/
-    datasets/        real UCI SMS corpus + synthetic set + provenance docs + training reports
-    evaluation/      evaluation_cases.json (tracked)
-  scripts/
-    evaluate_detection.py   64-case calibration harness
-    end_to_end_smoke.py     12-flow E2E smoke    ml_training/            train + evaluate + generate_dataset
-  tests/             pytest suites (incl. opt-in live OCR/threat-intel/LLM integration tests) (offline suite is hermetic; live suites are opt-in)
-frontend/
-  app/               routes: /, /dashboard, /investigate, /history, /results/[id]
-  components/        shell, landing, evidence, UI primitives
-  lib/               API client + shared types
-docker-compose.yml   postgres + backend + frontend
+AI-digital-scam-investigator/
+├── backend/
+│   ├── app/
+│   │   ├── agents/         LangGraph nodes (parse, OCR, analyze, URL, entity, intel, ML,
+│   │   │                   correlate, classify, risk, explain, report)
+│   │   ├── analysis/       Linguistic text-signal rules
+│   │   ├── api/routes/     health · investigations · analyze · demo
+│   │   ├── core/           Config, logging, rate limiting, upload security
+│   │   ├── extraction/     URL analysis, entity extractor, OCR adapter, text extractor
+│   │   ├── graph/          Typed InvestigationState + workflow builder
+│   │   ├── intelligence/   Provider interface, Safe Browsing, VirusTotal, demo, manager
+│   │   ├── llm/            Provider interface, OpenAI-compatible client, fallback
+│   │   ├── ml/             Features, classifier, service, dataset loader, shipped .joblib
+│   │   ├── patterns/       Declarative scam rules + category taxonomy
+│   │   ├── risk/           Deterministic weighted engine + evidence correlation
+│   │   ├── schemas/        Pydantic API contracts
+│   │   └── services/       Investigation orchestration + demo cases
+│   ├── data/
+│   │   ├── datasets/       Real UCI SMS corpus + synthetic set + provenance + training report
+│   │   └── evaluation/     evaluation_cases.json — the 64-case calibration corpus
+│   ├── scripts/            evaluate_detection.py · end_to_end_smoke.py · ml_training/
+│   └── tests/              Hermetic pytest suites + opt-in live OCR / intel / LLM suites
+├── frontend/
+│   ├── app/                / · /dashboard · /investigate · /history · /results/[id]
+│   ├── components/         Shell, landing, investigation views, UI primitives
+│   └── lib/                API client + shared types
+├── docs/                   ARCHITECTURE · DEPLOYMENT · ROADMAP · CONTRIBUTING_CHECKLIST
+├── docker-compose.yml      postgres + backend + frontend (configuration; unverified here)
+└── .env.example            Documented placeholders (no secrets)
 ```
 
 ---
@@ -794,74 +759,96 @@ docker-compose.yml   postgres + backend + frontend
 
 Honest, current constraints:
 
-- **The shipped ML model is trained on the real UCI SMS corpus** (SMS spam/ham, CC BY 4.0). It
-  generalizes well to SMS spam but is **not** a complete phishing/URL/scam dataset — other scam
-  categories rely on rules, NLP, URL analysis, threat intelligence and evidence correlation.
-- **ML metrics** (F1 0.756 on the UCI held-out test split) measure the *model*; **end-to-end
-  detection metrics** (F1 1.000 on the 64-case fictional corpus) measure the *whole pipeline*.
-  The two must never be combined — see [AI / ML Architecture](#ai--ml-architecture) and
-  [Evaluation](#evaluation). A perfect score on a 64-case fictional corpus with mock providers is
-  a calibration statement, not a real-world accuracy claim.
-- **Live integrations were verified against real providers** — see
-  [Live integration status](#live-integration-status) for what was actually executed, and which
-  checks still require a credential or a host capability this environment did not have.
-- **Text rules are English-centric.**
-- **Rule matching is keyword- plus regex-based, still surface-form driven.** Rules carry literal
-  keywords *and* declarative regex variants (`ScamRule.patterns`) matched over the normalised
-  text, which covers numeric (`guaranteed 40% returns`), hyphenated (`risk-free`) and
-  word-order (`investment … risk-free`) variants of the same claim. Variants that are not in a
-  rule's pattern set (a synonym, another currency symbol, a paraphrased claim) still need a rule
-  or signal update — matching is bounded by what the patterns enumerate, not by semantics.
-  Because the matcher also produces the model's `scam_keyword_hits` feature, changing it means
-  retraining and re-validating the tracked artifact (done here: identical held-out metrics).
-- **Scam-type labels can still be imprecise on benign look-alikes even when the band is right.**
-  Benign texts that *quote* the same wording a scam uses (a real file-sharing notification saying
-  "a file has been shared with you", a genuine e-signature request) can inherit a phishing or
-  delivery label while the risk band correctly stays LOW; the band, not the label, gates the
-  verdict. Scam-context gating (`requires_request_context`, `required_entities`) keeps the
-  common cases correct — the documented receipt and carrier-notice examples now come back LOW and
-  `unknown` — but the labelled look-alike class remains advisory by design.
-- **A single deterministic rule cannot reach MEDIUM on its own.** Pattern evidence is normalised
-  over the participating channels by design (`pattern_score = Σweights / 4.0`, weight `0.35`), so
-  one rule plus a weak ML signal can land just under the band boundary (e.g. an unsolicited
-  document link with a benign-looking ML score scores ~23 instead of ~27). Corroboration is
-  required before a case is escalated; sparse single-signal cases report PARTIAL/INSUFFICIENT
-  evidence rather than a confident verdict.
-- **Docker configuration is unverified in this environment** (no Docker CLI); it was not modified.
-- The system is **decision support** — it produces probabilistic, evidence-based assessments,
+- **The 64-case corpus is fictional calibration material.** A clean sweep shows that documented
+  failure modes stay fixed and that benign hard negatives stay `LOW` — it is not real-world accuracy.
+- **The ML model is trained on SMS spam/ham only**, so categories beyond SMS spam depend primarily on
+  the deterministic channels; the model carries the smallest weight by design.
+- **Pattern coverage is bounded and surface-form driven.** Rules match literal keywords *and*
+  declarative regex variants (numeric, hyphenated and word-order forms of the same claim), but a
+  synonym or paraphrase that is not enumerated still needs a rule or signal update.
+- **Scam-type labels can be imprecise on benign look-alikes** even when the band is right (a real
+  file-sharing notification can inherit a phishing label at `LOW`). The band, not the label, gates
+  the verdict, and an LLM may not invent a category without deterministic evidence.
+- **A single deterministic rule cannot reach `MEDIUM` on its own** — pattern evidence is normalised
+  over the participating channels by design, so sparse single-signal cases report
+  `PARTIAL`/`INSUFFICIENT` evidence rather than escalating.
+- **Detection is English-centric.**
+- **PostgreSQL was not executed here** (not installed); the code path and compose configuration are
+  present and engine-portable, but unverified locally.
+- **Docker was not executed here** (no Docker CLI); the Dockerfiles and compose file are unchanged
+  and untested in this environment.
+- **No cloud deployment exists** — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the intended,
+  partly unverified paths.
+- **No authentication or multi-tenancy**: history is a single shared store, and the rate limiter is
+  in-process (a Redis-backed limiter is the production upgrade path).
+- The system is **decision support** — it produces probabilistic, evidence-based assessments and
   never guarantees.
 
 ---
 
 ## Roadmap
 
-Concrete, engineering-backed next steps (not commitments):
+Completed:
 
-1. ✅ **Done:** retrained the classifier on the real UCI SMS corpus via the existing loader/trainer.
-2. Broaden training data beyond SMS (phishing/URL-heavy labelled corpora) to widen the ML
-   channel's coverage while keeping the deterministic channels primary.
-3. Parallel provider fan-out with timeouts for lower live-query latency.
-3. Multiclass category head so category quality is trained and measured, not rules-only.
-4. Add a CI workflow running the full gate (backend pytest, evaluation harness, E2E, frontend
-   typecheck + build).
+- [x] Evidence extraction, typed evidence model and correlation
+- [x] Deterministic URL analysis (non-fetching, structural)
+- [x] Screenshot OCR investigation (Tesseract + labelled mock fallback)
+- [x] Live threat intelligence (Google Safe Browsing, VirusTotal) with fail-safe normalisation
+- [x] ML pipeline trained and validated on the real UCI SMS corpus
+- [x] LangGraph orchestration with parallel branches and conditional edges
+- [x] Deterministic risk engine with band, confidence, sufficiency and contributors
+- [x] Grounded LLM explanation and report with deterministic fallback
+- [x] 64-case calibration corpus plus hermetic pytest suites
+- [x] Next.js product surface (landing, dashboard, investigate, results, history)
+
+Future work (not started):
+
+- [ ] Broaden training data beyond SMS to phishing/URL-heavy labelled corpora
+- [ ] Grow the evaluation corpus with real-world-sourced, provenance-tracked cases
+- [ ] PostgreSQL production validation and migration tooling
+- [ ] CI pipeline covering backend tests, evaluation, E2E, typecheck and build
+- [ ] Authentication and multi-user deployment
+- [ ] Additional threat-intelligence providers
+- [ ] Richer analyst workflow (notes, case assignment, exports)
+- [ ] Parallel provider fan-out tuning to cut live-query latency
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the maintained version.
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Please keep the core invariants intact:
+Contributions are welcome. Before opening a pull request:
 
-- evidence stays structured and typed,
-- risk stays deterministic (LLM never scores),
-- provider failures are never "clean",
-- mocks stay labeled,
-- the evaluation corpus stays green (0 FP, 0 FN; a documented hard case may only be excluded
-  from band assertions by explicitly flagging it `known_hard_case` with a reason).
+1. **Keep the invariants intact** — evidence stays structured and typed, risk stays deterministic
+   (the LLM never scores), provider failures are never "clean", mocks stay labelled, and the
+   calibration corpus stays green (`0` false positives, `0` false negatives; a genuinely undecidable
+   case may be flagged `known_hard_case` with a written reason).
+2. **Run the relevant gates** and include the output in the PR:
 
-Open an issue or PR — tests run with `pytest`, the evaluation harness and the E2E smoke.
+   ```bash
+   cd backend && .venv/Scripts/python.exe -m pytest tests/ -q
+   .venv/Scripts/python.exe scripts/evaluate_detection.py      # detection changes
+   .venv/Scripts/python.exe scripts/end_to_end_smoke.py
+   cd ../frontend && npm run typecheck && npm run build        # UI changes
+   ```
+
+   If detection logic changes, remember that the rule matcher also feeds the model's
+   `scam_keyword_hits` feature — retrain with
+   `scripts/ml_training/train.py --dataset data/datasets/real/sms_spam_uci.csv --no-categories` and
+   report the held-out metrics.
+3. **Never commit secrets** — `.env` files are git-ignored; use `.env.example` placeholders and
+   environment variables, and never paste keys into issues or logs.
+4. **Keep documentation true** — update the README and docs when behaviour, configuration or metrics
+   change, and never present calibration numbers as real-world accuracy.
+
+The detailed checklist lives in [docs/CONTRIBUTING_CHECKLIST.md](docs/CONTRIBUTING_CHECKLIST.md).
 
 ---
 
-## License
+## License and author
 
-[MIT](./LICENSE) © 2026 Uday Prakash Rastogi
+[MIT License](./LICENSE) © 2026 **Uday Prakash Rastogi**
+
+> Built as an engineering demonstration of evidence-first, deterministic-risk scam investigation.
+> Please report security concerns privately rather than in a public issue.
