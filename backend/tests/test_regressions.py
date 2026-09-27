@@ -309,6 +309,60 @@ def test_shared_document_language_does_not_steal_the_banking_category():
     assert classification.primary == "banking_scam"
 
 
+# ---------------------------------------------------------------------------
+# LLM refinement must stay evidence-driven
+# ---------------------------------------------------------------------------
+
+class _FakeLLM:
+    """A live-looking provider that always proposes one fixed category."""
+
+    name = "fake-openai-compatible"
+    is_mock = False
+
+    def __init__(self, primary: str) -> None:
+        self.primary = primary
+
+    async def classify(self, context):
+        from app.schemas.analysis import ScamClassification
+
+        return ScamClassification(
+            primary=self.primary, alternatives=[], confidence=0.5, method="hybrid(rules+llm)"
+        )
+
+
+@pytest.mark.asyncio
+async def test_llm_cannot_invent_a_category_without_deterministic_evidence(monkeypatch):
+    """A live LLM must not label a message the rules found no scam signal in."""
+    from app.agents import classify_node
+
+    monkeypatch.setattr(classify_node, "get_llm_provider", lambda: _FakeLLM("delivery_scam"))
+    text = "Receipt for your parcel delivery. Your parcel was delivered successfully."
+    result = await run_investigation(prepare_state("llm-guard", InputPayload(text=text)))
+
+    assert result["status"] == "completed"
+    assert result["classification"].primary == "unknown"
+    rejected = [e for e in result["evidence"] if e.signal == "classification_suggestion_rejected"]
+    assert rejected, "the unadopted suggestion must be recorded, not silently dropped"
+    assert rejected[0].detail["suggested_primary"] == "delivery_scam"
+    assert result["risk"].level == "LOW"
+
+
+@pytest.mark.asyncio
+async def test_llm_refinement_is_adopted_when_rules_found_evidence(monkeypatch):
+    """Refinement still works where the deterministic engine did find a scam."""
+    from app.agents import classify_node
+
+    monkeypatch.setattr(classify_node, "get_llm_provider", lambda: _FakeLLM("investment_scam"))
+    text = (
+        "Earn up to 5% daily with our crypto mining pool! Guaranteed payouts and staking "
+        "rewards for early depositors. Deposit BTC to your mining account today."
+    )
+    result = await run_investigation(prepare_state("llm-adopt", InputPayload(text=text)))
+
+    assert result["classification"].primary == "investment_scam"
+    assert result["classification"].method == "hybrid(rules+llm)"
+
+
 def test_risk_bands_are_monotonic():
     weak = compute_risk(RiskInputs(otp_request=0.0))
     medium = compute_risk(

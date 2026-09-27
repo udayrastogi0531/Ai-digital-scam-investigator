@@ -11,7 +11,11 @@ category refined.  Two refiners run, in priority order:
    left as "unknown";
 2. LLM refinement — only when a live LLM is configured; it receives the
    same structured evidence and its output is Pydantic-validated.  The mock
-   provider returns ``None`` so demo mode stays deterministic.
+   provider returns ``None`` so demo mode stays deterministic.  A live model
+   may only pick *which* scam an ambiguous case is: if the deterministic
+   engine found no scam evidence at all (no rule matched, nothing was
+   requested) its proposed category is recorded as a rejected suggestion
+   instead of being adopted.
 
 A refinement can never change the risk score — risk stays deterministic.
 """
@@ -43,6 +47,30 @@ _OFFICIAL_DOMAINS = {
     "twitter.com", "x.com", "chase.com", "wellsfargo.com", "hsbc.com",
     "barclays.com", "santander.com", "citi.com", "bankofamerica.com",
 }
+
+
+def _has_deterministic_scam_evidence(state: InvestigationState) -> bool:
+    """Whether the deterministic branches found any scam signal at all.
+
+    Refinement decides *which* scam an ambiguous case is — it must not
+decide *that* a case is one.  When no rule matched and the message requests
+    nothing, the honest answer is already "no scam pattern matched"; letting a
+    language model replace that with a category invents a finding the evidence
+    does not support (a genuine receipt mentioning a parcel is not a delivery
+    scam, even though a model asked to pick the closest category will say so).
+    """
+    if state.get("pattern_matches"):
+        return True
+    signals = state.get("text_signals")
+    if signals is None:
+        return False
+    return bool(
+        signals.payment_request
+        or signals.credential_request
+        or signals.otp_request
+        or signals.sensitive_info_request
+        or signals.suspicious_instructions
+    )
 
 
 def _url_derived_classification(state: InvestigationState) -> ScamClassification | None:
@@ -107,20 +135,52 @@ async def classify_refine_node(state: InvestigationState) -> InvestigationState:
     provider = get_llm_provider()
 
     refined: ScamClassification | None = None
+    rejected: ScamClassification | None = None
     if not provider.is_mock:
         try:
             refined = await provider.classify(build_context(state))
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM classification refinement failed: %s", exc)
+        # A live LLM naming a scam category for a message the deterministic
+        # engine found no scam evidence in is a suggestion, not a finding:
+        # keep the rules result and record that the suggestion was not adopted.
+        if (
+            refined is not None
+            and refined.primary not in (None, "unknown", "other")
+            and url_cls is None
+            and not _has_deterministic_scam_evidence(state)
+        ):
+            rejected = refined
+            refined = None
     if refined is None:
         # demo/unavailable: prefer deterministic URL-derived, else rules result
         refined = url_cls if url_cls is not None else rules
 
-    if refined is None or refined.primary == (rules.primary if rules else None):
-        # nothing changed — no evidence to record
-        return state_update(state, classification=refined) if refined is not None else state_update(state)
-
     evidence: list[EvidenceSignal] = []
+    if rejected is not None:
+        evidence.append(
+            EvidenceSignal(
+                source="llm_classification",
+                signal="classification_suggestion_rejected",
+                severity="info",
+                confidence=0.4,
+                description=(
+                    f"The language model suggested '{rejected.primary}' for a message with no "
+                    "deterministic scam evidence (no rule matched, nothing was requested), so the "
+                    "suggestion was not adopted and the category stays evidence-driven."
+                ),
+                detail={
+                    "provider": provider.name,
+                    "is_mock": provider.is_mock,
+                    "suggested_primary": rejected.primary,
+                },
+            )
+        )
+
+    if refined is None or refined.primary == (rules.primary if rules else None):
+        # nothing changed — only a rejected suggestion (if any) is recorded
+        return state_update(state, classification=refined, evidence=evidence)
+
     source = "url_classification" if refined.method == "url_analysis" else "llm_classification"
     evidence.append(
         EvidenceSignal(

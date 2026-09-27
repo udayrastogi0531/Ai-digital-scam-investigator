@@ -269,7 +269,9 @@ training as evidence the model detects every type of scam.
 **LLM.** An optional OpenAI-compatible provider (any base URL — `gpt-4o-mini` by default) is
 used for classification refinement and explanation/report synthesis. It receives **only the
 structured evidence** (`ReportContext`) under an evidence-only prompt contract: it cannot invent
-threat-intelligence results or external facts, and it cannot change the risk score. Malformed,
+threat-intelligence results or external facts, it cannot change the risk score, and it cannot
+assert a scam category the deterministic evidence does not support — refinement only picks among
+categories the evidence already implies. Malformed,
 empty or failed LLM output falls back to the deterministic explanation/report
 (`provider = "deterministic-fallback"`). Without a key, the system runs fully deterministic.
 
@@ -514,7 +516,7 @@ category + band metrics.
 
 | Suite | Command | Result |
 |---|---|---|
-| Backend unit/integration | `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` | **177 passed**, 11 skipped (opt-in live suites) |
+| Backend unit/integration | `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` | **180 passed**, 11 skipped (opt-in live suites) |
 | Live threat-intel / LLM (opt-in) | `RUN_LIVE_INTEL_TESTS=1` / `RUN_LIVE_LLM_TESTS=1` | requires real API keys |
 | Live OCR (opt-in) | `RUN_LIVE_OCR_TESTS=1 … -m pytest tests/test_ocr_live.py -q` | **7 passed** with a system Tesseract |
 | Evaluation harness | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64-case corpus |
@@ -734,6 +736,11 @@ was not re-executed, so its numbers are unchanged):
   an instruction, urgency or a threat). The receipt now scores **LOW 2.9 / `unknown`**, while a
   real fee demand (`Pay the $2.99 redelivery fee within 24 hours`) still reaches **MEDIUM 35.6
   / `delivery_scam`**, and a genuine carrier notice with an official tracking link stays LOW.
+  The label is also protected from a *live* model: classification refinement decides only
+  **which** scam an ambiguous case is, so when no rule matched and nothing was requested the
+  LLM's proposed category is recorded as a rejected suggestion
+  (`classification_suggestion_rejected`) instead of replacing the honest `unknown` (previously a
+  live Gemini run relabelled the same receipt `delivery_scam`).
 
 ---
 

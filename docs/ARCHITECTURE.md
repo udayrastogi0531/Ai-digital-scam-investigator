@@ -39,7 +39,11 @@
    change the risk assessment.
 3. **The LLM is a synthesizer.** Explanation/report agents receive only the structured evidence
    (`ReportContext`) and are constrained by an evidence-only prompt contract — no inventing
-   reputation results or external facts. Malformed, empty or failed LLM output falls back to the
+   reputation results or external facts. Classification refinement only chooses *which* scam an
+   ambiguous case is: when the deterministic engine found no scam evidence at all (no rule
+   matched, nothing requested) a proposed category is recorded as a rejected suggestion
+   (`classification_suggestion_rejected`) rather than adopted, so a benign-but-topical message
+   cannot be relabelled a scam. Malformed, empty or failed LLM output falls back to the
    deterministic explanation/report (`provider = "deterministic-fallback"`).
 4. **Mocks are labelled.** Demo threat-intel, OCR and explanation providers mark their output
    (`is_mock`, `[DEMO]`, provider_mode) which the UI surfaces as warnings.
