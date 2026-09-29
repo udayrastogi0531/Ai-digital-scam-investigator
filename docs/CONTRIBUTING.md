@@ -248,7 +248,11 @@ Documentation is part of the change, not a follow-up:
 - Behaviour, configuration, metrics or endpoints changed → update the affected doc **in the same pull
   request**. The docs to consider: [README](../README.md), [ARCHITECTURE](ARCHITECTURE.md),
   [EVALUATION](EVALUATION.md), [API](API.md), [SECURITY](SECURITY.md), [DEPLOYMENT](DEPLOYMENT.md),
-  [ROADMAP](ROADMAP.md), [data/datasets/README](../backend/data/datasets/README.md).
+  [PROVIDERS](PROVIDERS.md), [TESTING](TESTING.md), [TROUBLESHOOTING](TROUBLESHOOTING.md),
+  [GLOSSARY](GLOSSARY.md), [ROADMAP](ROADMAP.md),
+  [data/datasets/README](../backend/data/datasets/README.md).
+- A user-visible or behavioural change also gets an entry in [CHANGELOG.md](CHANGELOG.md), naming the
+  commit so the entry stays verifiable.
 - **Never overstate.** Do not present calibration-corpus numbers as real-world accuracy, do not claim a
   deployment, integration or database path was verified when it was not, and do not add badges or
   screenshots that do not correspond to something real.

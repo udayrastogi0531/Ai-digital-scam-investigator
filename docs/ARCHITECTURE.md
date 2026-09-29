@@ -2,7 +2,9 @@
 
 > **Scope.** This is the engineering deep dive: how the system is actually built, which invariants
 > are enforced in code, and where each behaviour lives. For the product overview — problem,
-> capabilities, evaluation and quick start — read [../README.md](../README.md).
+> capabilities, evaluation and quick start — read [../README.md](../README.md). The vocabulary used
+> here (band, sufficiency, applicability, anchor, verdict versus status) is defined in
+> [GLOSSARY.md](GLOSSARY.md).
 
 An investigation is a **pipeline of deterministic, evidence-producing stages** wrapped in a
 LangGraph workflow. Evidence is extracted and typed first; each channel is analysed independently;

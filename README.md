@@ -79,7 +79,13 @@ Every document in this repository, and the question it answers:
 | [docs/API.md](docs/API.md) | What are the endpoints, contracts, response shapes and error semantics? |
 | [docs/SECURITY.md](docs/SECURITY.md) | What is the threat model, what leaves the machine, and what is explicitly not covered? |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How do I deploy this — and which paths were actually verified versus only configured? |
+| [docs/PROVIDERS.md](docs/PROVIDERS.md) | How do the threat-intel and LLM integrations work, and how do I add one? |
+| [docs/TESTING.md](docs/TESTING.md) | Which suites exist, what does each one cover, and what is deliberately untested? |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Something is broken — what is the cause and the fix? |
+| [docs/FAQ.md](docs/FAQ.md) | Is the 100% figure real? Why is precision only 0.67? Is a URL fetched? |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | What exactly do band, sufficiency, verdict, anchor and the rest mean in this codebase? |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Where does a change belong, which gates must pass, and what will not be merged? |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed, when, and why? |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is planned, what is the acceptance gate for each item, and what is deliberately not planned? |
 | [backend/data/datasets/README.md](backend/data/datasets/README.md) | Where does the training data come from, and what are its limits? |
 | [LICENSE](./LICENSE) | MIT — © 2026 Uday Prakash Rastogi |
@@ -791,7 +797,8 @@ AI-digital-scam-investigator/
 │   ├── app/                / · /dashboard · /investigate · /history · /results/[id]
 │   ├── components/         Shell, landing, investigation views, UI primitives
 │   └── lib/                API client + shared types
-├── docs/                   ARCHITECTURE · EVALUATION · API · SECURITY · DEPLOYMENT · ROADMAP · CONTRIBUTING
+├── docs/                   ARCHITECTURE · EVALUATION · API · SECURITY · DEPLOYMENT · PROVIDERS
+│                           TESTING · TROUBLESHOOTING · FAQ · GLOSSARY · CONTRIBUTING · CHANGELOG · ROADMAP
 ├── docker-compose.yml      postgres + backend + frontend (configuration; unverified here)
 └── .env.example            docker-compose env template (points DATABASE_URL at the postgres service)
 ```
