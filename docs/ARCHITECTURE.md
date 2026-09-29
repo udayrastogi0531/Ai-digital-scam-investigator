@@ -383,6 +383,8 @@ queries all providers **concurrently** with `asyncio.gather`, and merges the res
 
 The provider call is the only outbound request in the system, and it transmits the URL **as a value**
 to a reputation service — the application never dereferences it (see [§13](#13-security-boundaries)).
+Adding a provider, including the exact failure taxonomy you must implement, is documented in
+[PROVIDERS.md](PROVIDERS.md).
 
 ---
 

@@ -203,6 +203,9 @@ An evaluation case is a permanent assertion, so it comes with obligations. The f
 
 ## 7. Adding or changing a provider
 
+The full contract, the merge semantics and a worked checklist are in
+[PROVIDERS.md](PROVIDERS.md). The summary:
+
 Threat-intel providers implement `intelligence/base.py` and must return the normalised
 `ThreatIntelResult`. Requirements:
 
