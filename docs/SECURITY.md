@@ -78,7 +78,7 @@ Two boundary decisions shape almost every control below:
 
 | Control | Where | Notes |
 |---|---|---|
-| No user-URL fetching | throughout | Verified by inspection: the only `httpx` clients are the two reputation providers and the LLM |
+| No user-URL fetching | throughout | Asserted by `tests/test_ssrf_guard.py`: every outbound request during a submission containing internal addresses is captured, and only the reputation hosts may appear. Confirmed by inspection too — the only `httpx` clients are the two providers and the LLM |
 | Upload validation | `core/security.py::read_image_upload` | Bounded read, empty-file rejection, Pillow decode (content type not trusted), 64 M-pixel cap. Covered by `tests/test_upload_security.py`, including the rejected-upload-creates-no-investigation case |
 | Screenshots are never written to disk | `core/security.py::read_image_upload` returns validated bytes that live only in memory for the duration of the request | No upload file exists to leak, and no cleanup path is needed. `persist_upload` is also defined in `core/security.py` but is **not called by any route** |
 | Input limits | `schemas/evidence.py::InputPayload`, route `Form(max_length=50_000)` | Text length, URL count, blank-URL stripping |
@@ -178,9 +178,9 @@ Listed deliberately, because an undocumented limitation is indistinguishable fro
 - **No tamper-evident audit log** of who accessed which investigation (there is no "who").
 - **No coverage for some security code paths.** Upload *rejection* branches (oversized file,
   non-image bytes, pixel-bomb) now have dedicated tests
-  (`tests/test_upload_security.py`), but Pillow's own `DecompressionBombError` is still not mapped to a
-  clean `400`, and the no-SSRF property remains established by code inspection rather than asserted by
-  a test.
+  (`tests/test_upload_security.py`), and the no-SSRF property is asserted behaviourally by
+  `tests/test_ssrf_guard.py`, but Pillow's own `DecompressionBombError` is still not mapped to a clean
+  `400`, and the rate limiter has no test at all.
 
 ---
 
