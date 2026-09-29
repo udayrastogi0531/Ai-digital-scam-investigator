@@ -22,6 +22,7 @@ investigation report.
 
 [Repository](https://github.com/udayrastogi0531/Ai-digital-scam-investigator) ·
 [Architecture](docs/ARCHITECTURE.md) ·
+[Evaluation](docs/EVALUATION.md) ·
 [Deployment](docs/DEPLOYMENT.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Contributing](docs/CONTRIBUTING_CHECKLIST.md)
@@ -357,12 +358,14 @@ dominated by the live provider calls it makes.
 
 ## Evaluation
 
-Two measurement regimes exist and their numbers must **never** be combined.
+Two measurement regimes exist and their numbers must **never** be combined. This section summarises
+both; the full methodology, protocol, composition and limits are in
+**[docs/EVALUATION.md](docs/EVALUATION.md)**.
 
 ### Section A — end-to-end calibration corpus
 
 `backend/data/evaluation/evaluation_cases.json` holds **64 fictional cases** (24 benign including
-9 hard negatives, 40 scam across 13 labelled categories plus 2 intentionally unlabelled).
+9 hard negatives, 40 scam across 14 named categories plus 2 intentionally unlabelled).
 `scripts/evaluate_detection.py` runs every case through the **real API pipeline** (mock LLM + mock
 threat intel, the shipped ML model) and reports binary, category and band metrics.
 
