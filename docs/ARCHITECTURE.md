@@ -1,155 +1,561 @@
-# Architecture
+# Architecture — AI Digital Scam Investigator
 
-## Investigation pipeline
+> **Scope.** This is the engineering deep dive: how the system is actually built, which invariants
+> are enforced in code, and where each behaviour lives. For the product overview — problem,
+> capabilities, evaluation and quick start — read [../README.md](../README.md).
 
+An investigation is a **pipeline of deterministic, evidence-producing stages** wrapped in a
+LangGraph workflow. Evidence is extracted and typed first; each channel is analysed independently;
+the evidence is correlated with quality-aware weighting; a deterministic risk engine produces the
+score, band, confidence and sufficiency; and an LLM (optional) synthesises an explanation strictly
+from the evidence it is handed. The LLM is never part of the decision path.
+
+## Contents
+
+| # | Section | # | Section |
+|---|---|---|---|
+| 1 | [System overview](#1-system-overview) | 10 | [OCR architecture](#10-ocr-architecture) |
+| 2 | [Component architecture](#2-component-architecture) | 11 | [LLM grounding](#11-llm-grounding-architecture) |
+| 3 | [Request lifecycle](#3-request-lifecycle) | 12 | [Persistence](#12-persistence) |
+| 4 | [LangGraph workflow](#4-langgraph-workflow) | 13 | [Security boundaries](#13-security-boundaries) |
+| 5 | [Evidence model](#5-evidence-model) | 14 | [Failure handling](#14-failure-handling) |
+| 6 | [Detection layers](#6-detection-layers) | 15 | [Observability and logging](#15-observability-and-logging) |
+| 7 | [Risk engine](#7-risk-engine) | 16 | [Frontend and backend interaction](#16-frontend-and-backend-interaction) |
+| 8 | [ML architecture](#8-ml-architecture) | 17 | [Deployment architecture](#17-deployment-architecture) |
+| 9 | [Threat intelligence](#9-threat-intelligence-architecture) | | |
+
+---
+
+## 1. System overview
+
+Three runtime pieces:
+
+| Piece | Process | Responsibility |
+|---|---|---|
+| Frontend | Node (Next.js 15) | UI; proxies `/api/*` to the backend so the browser has a single origin |
+| Backend | Python 3.13 (FastAPI + LangGraph) | Validation, orchestration, all analysis, scoring, explanation, persistence |
+| Store | SQLite (local) or PostgreSQL (compose/cloud path) | Investigations, evidence rows, entities, per-stage results, risk assessments, reports |
+
+Design invariants, each enforced by code rather than convention:
+
+1. **Structured evidence precedes opinion.** Every analyser emits `EvidenceSignal` rows; no stage
+   hands free-form prose to the next.
+2. **Risk is deterministic and reproducible.** `risk/engine.py` computes the score from component
+   scores and weights; nothing an LLM returns can alter it.
+3. **Applicability, not silence, drives normalization.** Channels that could not have fired for a
+   submission never dilute the score; channels that could have fired but found nothing can be
+   dropped when the assessment is URL-anchored.
+4. **No information is never good news.** Provider failures, rate limits, malformed inputs and
+   no-record answers contribute nothing and never lower risk.
+5. **Uncertainty is a first-class output.** `evidence_sufficiency` and confidence are reported
+   alongside the band, and LOW conclusions are phrased so they cannot read as "verified safe".
+6. **Mocks announce themselves.** `is_mock`, `[DEMO]` labels and provider modes propagate to the API
+   response and the UI.
+7. **The application never fetches user-supplied URLs.** URLs are analysed structurally and sent to
+   reputation providers as values — there is no server-side request to attacker-controlled hosts.
+
+---
+
+## 2. Component architecture
+
+Module dependency view (the runtime view is in [../README.md](../README.md#architecture)):
+
+```mermaid
+flowchart LR
+    subgraph API["API layer — app/api, app/schemas"]
+        ROUTES["routes:<br/>health · investigations · analyze · demo"]
+        SCHEMAS["Pydantic contracts<br/>InputPayload · InvestigationView"]
+    end
+
+    subgraph CORE["Core — app/core"]
+        CONFIG["config<br/>settings, limits, keys"]
+        SEC["security<br/>upload sniffing, caps"]
+        RATE["rate_limit<br/>per-IP window"]
+        LOG["logging<br/>JSON, no message bodies"]
+    end
+
+    subgraph ORCH["Orchestration"]
+        SVC["services/investigation_service<br/>persist · run · shape responses"]
+        GRAPH["graph<br/>InvestigationState + builder"]
+        AGENTS["agents<br/>one module per stage"]
+    end
+
+    subgraph ANALYSIS["Analysis packages"]
+        EXTRACT["extraction<br/>URL · entities · OCR · text"]
+        SIGNALS["analysis<br/>linguistic signals"]
+        PATTERNS["patterns<br/>rules + taxonomy"]
+        MLPKG["ml<br/>features · classifier · service"]
+        INTEL["intelligence<br/>providers + manager"]
+        LLMPKG["llm<br/>providers + prompt contracts"]
+        RISKP["risk<br/>correlation + engine"]
+    end
+
+    DB[("SQLAlchemy async<br/>SQLite / PostgreSQL")]
+
+    ROUTES --> SVC
+    ROUTES --> SEC
+    ROUTES --> RATE
+    ROUTES --> SCHEMAS
+    SVC --> GRAPH
+    SVC --> DB
+    GRAPH --> AGENTS
+    AGENTS --> EXTRACT
+    AGENTS --> SIGNALS
+    AGENTS --> PATTERNS
+    AGENTS --> MLPKG
+    AGENTS --> INTEL
+    AGENTS --> LLMPKG
+    AGENTS --> RISKP
+    CONFIG -.-> SVC
+    LOG -.-> AGENTS
 ```
-                     ┌─────────────────────────────┐
- user submission ───▶│ API (FastAPI)               │
-   text / urls / img │  validation · rate limit    │
-                     └─────────────┬───────────────┘
-                                   ▼
-                     ┌─────────────────────────────┐
-                     │ LangGraph workflow          │
-                     │  START ─ (image?) OCR       │
-                     │      └──▶ parse             │
-                     │          └▶ analyze         │
-                     │              └─ conditional fan-out
-                     │                ├ URL analysis ─▶ threat intel lookup
-                     │                ├ brand/entity analysis
-                     │                └ ML classifier
-                     │              (equal-depth branches merge at correlate)
-                     │          correlate ─▶ assess risk ─▶ explain ─▶ report
-                     └─────────────┬───────────────┘
-                                   ▼
-                     ┌─────────────────────────────┐
-                     │ Persistence (SQLAlchemy)    │
-                     │  investigations, evidence,  │
-                     │  entities, analysis_results,│
-                     │  risk_assessments, reports  │
-                     └─────────────────────────────┘
+
+**Rule of thumb for changes:** analysis packages never import from `agents/`, and nothing outside
+`risk/` decides a risk number. `patterns/match_rules` is also consumed by `ml/features.py`, which is
+why changing rule matching requires retraining the shipped classifier (see [§8](#8-ml-architecture)).
+
+---
+
+## 3. Request lifecycle
+
+`POST /api/investigations` (multipart: `text`, `urls[]`, `title`, `source_label`, `image`):
+
+1. **Rate limit** — `core/rate_limit.py` applies a per-IP sliding window (`RATE_LIMIT_PER_MINUTE`,
+   default 30) before any work happens.
+2. **Upload validation** — `core/security.py::read_image_upload` reads at most
+   `MAX_UPLOAD_MB + 1` bytes, rejects empty/oversized files, and requires Pillow to decode the
+   bytes (the declared content type is ignored). A pixel-count cap guards against decompression
+   bombs; the stored filename is a generated `uuid4` with an allow-listed extension.
+3. **Contract validation** — `InputPayload` enforces `MAX_TEXT_LENGTH` (50,000) and
+   `MAX_URLS_PER_SUBMISSION` (20) and strips blank URLs.
+4. **Persistence start** — `investigation_service.create_and_run` inserts the investigation row with
+   `status="running"`.
+5. **Workflow** — the prepared `InvestigationState` (normalised text, explicit URLs, image bytes,
+   `input_types`) runs through the compiled LangGraph (§4).
+6. **Finalisation** — `_persist` writes the risk assessment, report, evidence rows, extracted
+   entities and one `analysis_results` row per timeline stage, then sets the investigation status to
+   the workflow's terminal status (`completed`, or `failed` with the error list).
+7. **Response shaping** — read paths (`to_summary`, `get_view`, `list_investigations`) rebuild the
+   API payload from the stored rows, including the timeline reconstructed from `analysis_results`.
+8. **Delete** — `DELETE /api/investigations/{id}` returns 204 or 404.
+
+The request is **synchronous**: the HTTP response is returned only after the workflow finishes, so
+live provider latency is part of the request. There are no queues or background workers.
+
+---
+
+## 4. LangGraph workflow
+
+```mermaid
+flowchart TD
+    START([START]) --> NEEDOCR{"image bytes?"}
+    NEEDOCR -->|yes| OCR["ocr"]
+    NEEDOCR -->|no| PARSE
+    OCR --> PARSE["parse"]
+
+    PARSE --> ANALYZE["analyze<br/>text signals + pattern rules"]
+    ANALYZE --> ROUTE{{"_route conditional fan-out"}}
+
+    ROUTE -->|"URLs present"| URLA["url_analysis"] --> INTEL["threat_intel_lookup"] --> CORRELATE
+    ROUTE -->|"org/brand mentioned"| BRANDA["brand_analysis"] --> BRANDPAD["brand_pad"] --> CORRELATE
+    ROUTE -->|always| MLN["ml_node"] --> MLPAD["ml_pad"] --> CORRELATE
+    ROUTE -->|"classification ambiguous"| REFINE["classify_refine"] --> REFPAD["classify_pad"] --> CORRELATE
+    ROUTE -->|"no specialist branch"| SYNTHPAD["synthesis_pad"] --> CORRELATE
+
+    CORRELATE["correlate"] --> RISK["assess_risk"] --> EXPLAIN["explain"] --> REPORT["generate_report"] --> DONE([END])
 ```
 
-## How findings stay honest
+Node inventory:
 
-1. **Evidence is structured first.** Text analysis, URL analysis, scam rules and the ML model emit
-   typed signals (`source`, `signal`, `severity`, `confidence`, `description`, `detail`) rather
-   than free-form claims.
-2. **Risk is deterministic.** The risk engine combines component scores with configurable weights;
-   the LLM is never the source of the score. Classification refinement and explanations cannot
-   change the risk assessment.
-3. **The LLM is a synthesizer.** Explanation/report agents receive only the structured evidence
-   (`ReportContext`) and are constrained by an evidence-only prompt contract — no inventing
-   reputation results or external facts. Classification refinement only chooses *which* scam an
-   ambiguous case is: when the deterministic engine found no scam evidence at all (no rule
-   matched, nothing requested) a proposed category is recorded as a rejected suggestion
-   (`classification_suggestion_rejected`) rather than adopted, so a benign-but-topical message
-   cannot be relabelled a scam. Malformed, empty or failed LLM output falls back to the
-   deterministic explanation/report (`provider = "deterministic-fallback"`).
-4. **Mocks are labelled.** Demo threat-intel, OCR and explanation providers mark their output
-   (`is_mock`, `[DEMO]`, provider_mode) which the UI surfaces as warnings.
-5. **Uncertainty is explicit.** Every risk assessment carries an `evidence_sufficiency` label
-   (INSUFFICIENT / PARTIAL / SUFFICIENT). LOW + INSUFFICIENT/PARTIAL is worded as
-   "low risk based on available evidence — not a verified safe result" in conclusions, reports
-   and the UI; sparse inputs never get a confident verdict.
+| Node | Module | Emits |
+|---|---|---|
+| `ocr` | `agents/ocr_node.py` | `ocr_text`, `ocr_confidence`, `ocr_provider`, `ocr_mock` |
+| `parse` | `agents/parser_node.py` | `normalized_text`, `entities`, initial evidence |
+| `analyze` | `agents/text_analysis_node.py` | `text_signals`, `scam_patterns`, `pattern_matches`, `classification` |
+| `url_analysis` | `agents/url_analysis_node.py` | `urls`, `url_signals` |
+| `threat_intel_lookup` | `agents/threat_intel_node.py` | `threat_intel` |
+| `brand_analysis` | `agents/entity_analysis_node.py` | `entity_analysis` |
+| `ml_node` | `agents/ml_node.py` | `ml_prediction` |
+| `classify_refine` | `agents/classify_node.py` | refined `classification` (or a rejected suggestion) |
+| `correlate` | `agents/correlation_node.py` | `correlation` (themes, corroboration, conflicts, consistency) |
+| `assess_risk` | `agents/risk_node.py` | `risk` |
+| `explain` | `agents/explain_node.py` | `explanation` |
+| `generate_report` | `agents/report_node.py` | `report` |
 
-## Risk calibration
+Routing rules (`builder._route`):
 
-- Weights live in `DEFAULT_WEIGHTS` (`risk/engine.py`, JSON-overridable via `RISK_WEIGHTS_PATH`)
-  and are tuned against `data/evaluation/evaluation_cases.json` (run
-  `scripts/evaluate_detection.py`). Current distribution: pattern rules `0.35`, threat intel
-  `0.25`, URL `0.18`, requests (credential/OTP `0.12` each, payment `0.10`, suspicious
-  instructions `0.08`), ML `0.10`, entity impersonation `0.08`, urgency `0.07`, consistency `0.05`.
-- The ML model (now trained on the real UCI SMS corpus) carries the *smallest* deterministic
-  weight on purpose: it is one probabilistic signal and never decides the verdict. It was
-  previously observed over-trusting surface keywords (OTP/password mentions) on benign messages
-  before the request-intent feature fix.
-- Request channels are requestive-only: a *mention* of OTP/password/payment never counts as a
-  request unless a requestive verb (enter/reply with/send us/…) is present, and protective
-  warnings ("never share your OTP") plus reassurance ("no action needed") suppress credential/
-  account alarm rules. This is what keeps legit 2FA texts, receipts and security notices LOW.
-- **Rules match keywords *and* declarative regex variants.** Each `ScamRule` carries literal
-  `keywords` plus optional `patterns` (compiled once at import, matched over the normalised text),
-  so numeric (`guaranteed 40% returns`), hyphenated (`risk-free`) and word-order
-  (`investment … risk-free`) variants of the same claim are covered without enumerating every
-  surface form as a keyword. Rules may also declare `required_entities` (e.g. the shared-document
-  link-bait rule only fires when a URL is present) and `requires_request_context` — status-only
-  wording such as “your parcel could not be delivered” is only evidence when the message also
-  requests a payment/credential/code, gives an instruction, or applies urgency/threat pressure.
-  A link alone does **not** lift that gate: genuine notices carry official tracking links, while a
-  scammy link is scored independently by the URL and threat-intel channels.
-- **URL-anchored normalization.** Submissions normalize over *applicable* channels only, and when
-  the assessment is URL-anchored — a URL with structural risk ≥ `URL_ANCHOR_MIN` (0.4), or a
-  threat-intel verdict of suspicious/malicious — channels that are applicable but *silent* (score
-  < `CHANNEL_SILENT_MAX` 0.2) drop out of the normalization denominator too. A strong lookalike/
-  credential URL next to neutral text therefore keeps its URL/intel evidence weight instead of
-  being diluted to LOW (the `suspicious_url` demo now reaches HIGH/CRITICAL). The anchor is
-  decided from generic structured evidence (never domains/test cases); an official domain with a
-  benign URL never anchors, so benign text next to an official URL stays LOW.
-- **Intel channel applicability is evidence-gated.** Threat-intel weight counts in the
-  denominator only when a provider returned an informative verdict (`safe`/`suspicious`/`malicious`
-  with `status=ok`). Unknown/no-record/error/unavailable/rate-limited lookups carry no
-  information: they neither contribute nor dilute and never look like a clean result.
+- `url_analysis` + `threat_intel_lookup` run **only when URLs exist** (explicit or extracted).
+- `brand_analysis` runs **only when a company/bank/organization entity was extracted**.
+- `ml_node` runs **always**.
+- `classify_refine` runs **only when the rules classification is ambiguous**
+  (`patterns.engine.is_ambiguous`: `unknown`, or confidence < 0.5). Deterministic classification is
+  never second-guessed by a model.
 
-## LangGraph notes
+State mechanics (`graph/state.py`):
 
-- Typed `InvestigationState`; reducer annotations on `evidence`/`timeline`/`warnings`/
-  `processing_metadata` allow parallel branches to merge safely.
-- Conditional edges run only needed branches (e.g. OCR only when an image is present).
-- langgraph 0.2.x mis-schedules merges of branches with *unequal* depth (the downstream subgraph
-  executes twice). The builder therefore pads branches so every active branch reaches the merge
-  node in the same superstep; the final state also de-duplicates timeline entries defensively.
+- `evidence`, `timeline`, `errors`, `warnings` use LangGraph's `operator.add` reducer, so parallel
+  branches append safely.
+- `correlation` and `processing_metadata` use a custom `merge_metadata` reducer that merges nested
+  per-stage dictionaries instead of replacing them.
+- Node names deliberately avoid state-channel names; LangGraph forbids registering a node whose name
+  collides with a channel.
 
-## Provider abstraction
+Two defensive details worth knowing before editing the graph:
 
-| Concern          | Interface                    | Default (demo)              | Live option                        |
-|------------------|------------------------------|-----------------------------|------------------------------------|
-| Threat intel     | `ThreatIntelProvider`        | `MockThreatIntelProvider`   | Google Safe Browsing, VirusTotal   |
-| LLM              | `LLMProvider`                | deterministic local         | OpenAI-compatible (any base URL)   |
-| OCR              | `OCRProvider`                | mock (no tesseract)         | system `tesseract` binary (subprocess) |
-| ML               | `ScamClassifier`             | trained LogisticRegression  | retrained pipeline via trainer     |
+- **Equal-depth branches.** langgraph 0.2.x mis-schedules merges of unequal-depth branches (the
+  merge target and everything after it execute twice). Zero-op `*_pad` nodes give every active
+  branch exactly two hops to `correlate`, and a `synthesis_pad` path exists for submissions where no
+  specialist branch runs. `run_investigation` additionally sorts and de-duplicates the timeline by
+  stage.
+- **Failure containment.** If the workflow raises, `run_investigation` records
+  `status="failed"` plus the error and a coherent timeline instead of propagating the exception, so
+  a provider or node bug degrades one investigation rather than the API.
 
-Threat-intel providers are queried by URL only (no server-side fetching of
-arbitrary URLs — no SSRF surface) and their raw API payloads are normalized
-at the boundary into `ThreatIntelResult` (`provider`, `verdict`
-`safe|suspicious|malicious|unknown`, `status` `ok|error|unavailable|rate_limited`,
-`risk_score`, `reputation`, `categories`, `hits`, safe `detail`, `checked_at`,
-`error`). The manager queries configured providers concurrently, merges
-worst-verdict-wins, and surfaces every per-provider outcome (including
-failures) in the merged `detail["providers"]` list so the UI can show who
-said what and who was down.
+---
 
-Failure behaviour is a hard invariant:
+## 5. Evidence model
 
-* a provider exception/outage/timeout/rate limit becomes `verdict=unknown`
-  with a non-`ok` status — it is *no information*, never a clean verdict;
-* failures never crash an investigation, never lower the merged risk and
-  never add weight to the risk-engine denominator;
-* the risk engine only treats `status=ok` + an informative verdict as
-  evidence.
+`EvidenceSignal` (`schemas/evidence.py`) is the currency of the pipeline:
 
-## ML data layer (training vs evaluation)
+| Field | Type | Meaning |
+|---|---|---|
+| `source` | str | Producing channel: `url_analysis`, `threat_intelligence`, `scam_pattern`, `text_analysis`, `entity_analysis`, `ml_classifier` |
+| `signal` | str | Short machine-readable code, e.g. `URL_RISK`, `CREDENTIAL_REQUEST`, `PATTERN_MATCH` |
+| `severity` | str | `low` / `medium` / `high` / `critical` (ordered map `low=1 … critical=4`) |
+| `confidence` | float | 0–1 confidence in that single observation |
+| `description` | str \| None | Human-readable explanation shown in the UI |
+| `detail` | dict | Structured payload (matched rule, URL findings, provider verdicts, feature contributions) |
 
-* `data/datasets/scam_messages.csv` — synthetic/demo training set
-  (generated deterministically; origin reported as `synthetic`).
-* `data/datasets/real/sms_spam_uci.csv` — the shipped **real** training corpus
-  (UCI SMS Spam Collection v.1, CC BY 4.0, 5,159 rows; provenance + policy in
-  `data/datasets/README.md`). Training runs with `--no-categories` because the
-  corpus has no scam-category labels.
-* `data/evaluation/evaluation_cases.json` — end-to-end corpus. The loader
-  (`app/ml/dataset.py`) refuses to load it as training data and rejects rows
-  whose ids overlap evaluation cases, so train/evaluation separation is
-  enforced in code.
-* `app/ml/dataset.py` validates required fields, labels, categories,
-  annotation confidence, duplicates and malformed rows; reports dataset
-  statistics; and provides a deterministic stratified train/val/test split.
+Correlation (`risk/correlation.py`) then:
 
-`scripts/ml_training/train.py` reports dataset size, class distribution,
-split sizes, precision/recall/F1 and the confusion matrix for the test
-split, labels the dataset origin (synthetic vs real) and never claims
-synthetic metrics as real-world evidence.
+1. **de-duplicates** by `(source, signal)`;
+2. **groups** signals into themes — `url_risk`, `external_reputation`, `scam_pattern`,
+   `language_signals`, `brand_impersonation`, `ml_prediction` (unknown sources fall back to their own
+   name);
+3. marks a theme **corroborating** when its worst signal is `medium` or above;
+4. detects **conflicts** (e.g. a provider says *safe* while local signals are suspicious) and
+   computes a **`consistency_score`** — `0.4` when nothing corroborates, `0.75` for one
+   corroborating theme, `0.9` for two, `1.0` for three or more, minus `0.2` on conflict;
+5. builds the deterministic **conclusion** text, using the sufficiency label so a LOW result can
+   never be phrased as a clean bill of health.
 
-## Data model
+This runs *before* the LLM so the explanation agent can reference pre-correlated facts.
 
-PostgreSQL / SQLite tables: `investigations`, `evidence`, `extracted_entities`,
-`analysis_results`, `risk_assessments`, `reports` — evidence signals are stored as rows
-(structured), with JSON columns reserved for flexible AI metadata.
+---
+
+## 6. Detection layers
+
+| Layer | Module | Method | Feeds |
+|---|---|---|---|
+| URL structure | `extraction/url_analysis.py` | Non-fetching analysis: lookalike/homoglyph brands, punycode, IP hosts, dangerous schemes, ports, subdomain depth, credential paths, shortener fingerprints, sensitive query params, missing HTTPS | `url_signals` (evidence) + `urls[].risk_score` |
+| Linguistic signals | `analysis/text_signals.py` | Phrase groups (urgency, fear/threat, reward, pressure, authority, payment/credential/OTP/sensitive requests, suspicious instructions, protective, reassurance) plus numeric regex variants | `text_signals` (scores + hit lists) |
+| Scam patterns | `patterns/rules.py` + `patterns/engine.py` | Declarative `ScamRule`s: literal keywords **and** compiled regex `patterns`, optional `required_entities` and `requires_request_context` gates; category ranking by summed weight, tie-broken by hit count | `scam_patterns` (evidence) + category classification |
+| Entities / brand | `extraction/entity_extractor.py` + `agents/entity_analysis_node.py` | URLs, emails, phones, amounts, dates, companies, banks, organizations; lookalike comparisons | `entities` + impersonation evidence |
+| Machine learning | `ml/` | 18-feature logistic-regression probability | `ml_prediction` (one weighted signal) |
+| External reputation | `intelligence/` | Google Safe Browsing + VirusTotal lookups by URL value | `threat_intel` (evidence + anchor decision) |
+
+Two semantics that keep the layers honest:
+
+- **Request vs mention.** A mention of an OTP, password or payment is not a request; request
+  channels need a requestive verb, and protective/reassurance language suppresses alarm rules.
+- **Status vs demand.** Rules with `requires_request_context` (delivery status, tracking) only fire
+  when the message also asks for something or applies pressure; a link alone does not lift the gate,
+  because genuine notices carry official links while scammy links are scored by the URL and intel
+  channels independently.
+
+---
+
+## 7. Risk engine
+
+`risk/engine.py::compute_risk` is a weighted sum over **participating** channels, normalised and
+turned into a band.
+
+| Channel | Default weight |
+|---|---|
+| Pattern rules | 0.35 |
+| Threat intelligence | 0.25 |
+| URL risk | 0.18 |
+| Credential request | 0.12 |
+| OTP request | 0.12 |
+| Payment request | 0.10 |
+| ML probability | 0.10 |
+| Entity impersonation | 0.08 |
+| Suspicious instructions | 0.08 |
+| Urgency | 0.07 |
+| Sensitive info | 0.07 |
+| Consistency | 0.05 |
+
+Weights are overridable at runtime through `RISK_WEIGHTS_PATH`.
+
+Rules that decide who participates:
+
+- **Applicability** — a channel with no possible input (URL risk on a text-only message) is not in
+  the denominator at all. In `agents/risk_node.py`, `pattern_score` is
+  `min(1.0, Σ matched weights / 4.0)`, and the ML channel participates only when a prediction exists.
+- **Intel informativeness** — the intel channel counts only when a provider returned a *usable*
+  verdict (`safe`/`suspicious`/`malicious` with `status=ok`). `unknown`, `error`, `unavailable` and
+  `rate_limited` are no information: they neither contribute nor dilute.
+- **URL anchoring** — (`URL_ANCHOR_MIN = 0.4`, or an intel verdict of suspicious/malicious) when the
+  assessment is URL-anchored, applicable channels whose score is below `CHANNEL_SILENT_MAX = 0.2`
+  drop out of the denominator too, so a credential-harvesting URL beside neutral text is not diluted
+  to LOW.
+- **Consistency** — the correlation `consistency_score` is itself a weighted channel, so
+  contradictions dampen the score rather than being averaged away.
+- **Confidence and sufficiency** — derived from the same evidence pool (`INSUFFICIENT_MAX = 0.35`,
+  `SUFFICIENT_MIN = 0.60`); sparse submissions report `INSUFFICIENT`/`PARTIAL` instead of a confident
+  verdict.
+
+Bands: `LOW` 0–24 · `MEDIUM` 25–49 · `HIGH` 50–74 · `CRITICAL` 75–100.
+
+Every assessment returns `RiskContributor` rows (`name`, `impact` in −1…1, `detail`,
+`evidence_sources`) so the UI's "Why this score?" panel is rendered from the actual arithmetic
+rather than a narrative.
+
+---
+
+## 8. ML architecture
+
+**Features (18, `ml/features.py::FEATURE_NAMES`)** — `message_length`, `word_count`,
+`special_char_frequency`, `uppercase_ratio`, `urgent/fear_threat/reward/pressure/authority` scores,
+`payment_request`, `credential_request`, `otp_request`, `sensitive_info_request`, `has_phone`,
+`has_email`, `amount_count`, `scam_keyword_hits`, `punctuation_ratio`.
+
+The **same** `extract_features` function is used by training and by `agents/ml_node.py`, so the
+model sees the distribution it was trained on. URL-*presence* features are intentionally absent:
+this product investigates suspicious URLs by design, so presence is uninformative, and training on
+it made the SMS-trained model flag any URL-bearing message as spam. URL risk is scored by the
+dedicated channel instead.
+
+**Pipeline** — `StandardScaler` → `LogisticRegression(max_iter=2000, C=0.8, class_weight="balanced")`,
+persisted with joblib to `ML_MODEL_PATH`. `ml/service.py` loads it once; if the artifact is missing
+or unreadable the service falls back to a deterministic heuristic and labels the result as such
+(never as a model prediction).
+
+**Training** (`scripts/ml_training/train.py`, `--dataset … --no-categories`, seed 42):
+
+1. The validated loader (`ml/dataset.py`) enforces the schema (`text`/`label` required, valid
+   categories when used), rejects malformed rows, removes exact duplicates and reports statistics.
+2. It **refuses** anything under `data/evaluation/` and rejects rows whose ids collide with
+   evaluation cases, so the calibration corpus can never leak into training metrics.
+3. A deterministic stratified split (default 0.2 test / 0.1 validation) is produced; the reported
+   metrics come from the held-out test split.
+4. `ML_DECISION_THRESHOLD` (default `0.55`) is the max-F1 operating point chosen on the validation
+   split. It only affects the *reported label*: the risk engine consumes the raw probability as one
+   weighted signal.
+
+**Shipped artifact** — trained on the real UCI SMS Spam Collection v.1 (5,159 rows, CC BY 4.0),
+held-out accuracy 0.9312 · precision 0.6748 · recall 0.8594 · F1 0.7560 · ROC-AUC 0.9707. Because
+rule matching produces the `scam_keyword_hits` feature, **changing `patterns/rules.py` or the engine
+invalidates the artifact** and it must be retrained and re-validated before the change ships.
+
+**Why the smallest weight.** The corpus is SMS spam/ham supervision — 13% prevalence, English-only,
+no URL-bearing rows — so it cannot represent phishing, URL, crypto, impersonation or screenshot
+threats. The model contributes one probabilistic signal at weight `0.10`; categories beyond SMS spam
+are carried by the deterministic channels.
+
+---
+
+## 9. Threat intelligence architecture
+
+Every provider implements the same contract (`intelligence/base.py`) and returns a normalised
+`ThreatIntelResult`: `provider`, `verdict` (`safe`/`unknown`/`suspicious`/`malicious`), `status`
+(`ok`/`error`/`unavailable`/`rate_limited`), `risk_score`, `reputation`, `categories`, `hits`,
+`is_mock`, `error`, `checked_at` and a per-provider `detail` block. Normalising at the boundary is
+what lets the risk engine reason about quality instead of provider-specific shapes.
+
+| Provider | Endpoint | Auth | Notes |
+|---|---|---|---|
+| `google_safe_browsing` | Threat Matches `v4` lookup | `x-goog-api-key` **header** | Never a query parameter — request URLs are logged by HTTP clients and proxies |
+| `virustotal` | `GET /urls/{id}` (`v3`) | `x-apikey` header | `id` is the base64url (unpadded) encoding of the URL; a `404` is translated to "not seen", not to "safe" |
+| `mock` | — | — | Used only when no key is configured; labels itself `is_mock` |
+
+`intelligence/manager.py` builds the provider list from configured keys (mock only as the fallback),
+queries all providers **concurrently** with `asyncio.gather`, and merges the results:
+
+- **Worst verdict wins** (`safe 0 < unknown 1 < suspicious 2 < malicious 3`) and `risk_score` is the
+  maximum across providers — safety-first aggregation, so one malicious verdict is never averaged
+  away by a clean one.
+- **Status semantics.** `status = ok` as soon as *any* provider produced a real verdict; otherwise the
+  most severe failure state is surfaced (`error` < `unavailable` < `rate_limited`), so an outage is
+  visible rather than masquerading as "no result".
+- **Nothing is lost.** `hits` is summed, `categories` are unioned, and every provider's own row stays
+  in `detail.providers` for the UI and the audit trail.
+
+The provider call is the only outbound request in the system, and it transmits the URL **as a value**
+to a reputation service — the application never dereferences it (see [§13](#13-security-boundaries)).
+
+---
+
+## 10. OCR architecture
+
+Screenshots enter through the same pipeline as text. `extraction/ocr.py` defines an `OCRProvider`
+interface with two implementations:
+
+| Provider | Behaviour |
+|---|---|
+| `tesseract` | Renders the validated image to PNG in a temp directory and runs `tesseract <img> stdout --psm 3 -l eng` in a thread, with a 60 s subprocess timeout. Images outside `RGB`/`L` are converted, and oversized images are downscaled to a pixel cap before recognition. |
+| `mock` | The honest fallback: extracts nothing, returns `is_mock=True`, and reports why. |
+
+`get_ocr_provider()` honours `OCR_PROVIDER` (`auto` / `tesseract` / `mock`); `auto` selects Tesseract
+only when the configured binary actually resolves on `PATH`.
+
+Honesty rules in `agents/ocr_node.py`:
+
+- A missing binary, a non-zero exit or an unreadable image yields **empty text plus an `error` and a
+  visible warning**. No text is ever fabricated from an image.
+- A mock run emits an `ocr_mock` evidence signal so downstream stages and the UI can tell "nothing was
+  extracted" apart from "the screenshot was clean".
+- Tesseract's per-word confidence requires TSV output, so the provider returns a **conservative
+  indicative** value rather than a precise-looking number that was never measured.
+
+Extracted text is folded into `normalized_text` and then flows through parse → analyse → correlate →
+risk exactly like typed input — there is no separate, weaker path for screenshots.
+
+---
+
+## 11. LLM grounding architecture
+
+The LLM is an **explanation and phrasing layer**, never a decision path. It is invoked only at three
+points, each of which receives a structured, pre-computed context rather than raw authority:
+
+| Call site | Purpose | Constraint |
+|---|---|---|
+| `explain_node` | Explain the findings in calibrated prose | Prompt contract: evidence-only; a `limitations` field for what could **not** be verified |
+| `report_node` | Compose the human-readable report | Same `ReportContext`; the deterministic risk block is passed in as facts |
+| `classify_node` | Suggest refining an *ambiguous* category | Only called when `patterns.engine.is_ambiguous`; the suggestion is rejected unless deterministic evidence already supports it, and a rejection is recorded |
+
+`ReportContext` is assembled from `InvestigationState` (entities, URLs, text signals, pattern signals,
+threat intel, ML prediction, entity analysis, classification, risk, evidence, timeline). The system
+prompt is the shared `EVIDENCE_ONLY_SYSTEM` contract: reason **only** from supplied evidence, never
+state an objective without supporting evidence, and emit JSON. Because the risk score, band and
+sufficiency are already computed before this call, no model output can move them.
+
+Provider selection is a two-branch factory (`llm/manager.py`): `openai_compatible` when
+`LLM_PROVIDER=openai_compatible` **and** a key is present, otherwise `mock`. `deterministic.py`
+provides template-based text for the offline path, and a provider failure falls back to it, so an
+investigation always produces a readable explanation. Any OpenAI-compatible endpoint works
+(`LLM_BASE_URL`), which is how Gemini and OpenAI-style gateways are both supported without
+provider-specific code.
+
+---
+
+## 12. Persistence
+
+Async SQLAlchemy 2 (`database.py`). The engine is created once from `DATABASE_URL`;
+`create_tables()` runs in the FastAPI lifespan and is idempotent. There is **no migration
+framework** — schema changes are applied by `create_all` on a fresh database.
+
+| Table | Contents |
+|---|---|
+| `investigations` | Submission metadata, input types, status, timestamps |
+| `evidence` | One row per `EvidenceSignal` (source, signal, severity, confidence, description, detail) |
+| `extracted_entities` | URLs, emails, phones, amounts, dates, companies, banks, organizations |
+| `analysis_results` | One row per timeline stage — this is what the UI timeline and the API view are rebuilt from |
+| `risk_assessments` | Score, band, confidence, sufficiency, contributors |
+| `reports` | The generated report payload |
+
+Reads rebuild the API response from stored rows rather than from memory, so a result page renders
+identically after a restart. Filters are written to be portable across SQLite and PostgreSQL
+(`json_extract` vs `->>` / `.astext`). SQLite is single-writer and is the verified local path;
+PostgreSQL 16 via `postgresql+asyncpg://` is the compose/cloud path and requires `asyncpg`.
+
+---
+
+## 13. Security boundaries
+
+| Boundary | Enforcement |
+|---|---|
+| **No SSRF.** | The server never fetches a user-supplied URL. URLs are parsed structurally and sent to reputation providers as *values*; there is no `requests.get(user_input)` path anywhere. |
+| **Upload safety.** | `core/security.py::read_image_upload` caps bytes at `MAX_UPLOAD_MB + 1`, rejects empty files, ignores the declared content type and requires Pillow to decode the bytes, rejects images above a 64 M-pixel cap (decompression bombs), and stores under a generated `uuid4` name with an allow-listed extension. |
+| **Input limits.** | `MAX_TEXT_LENGTH` (50,000) and `MAX_URLS_PER_SUBMISSION` (20) are enforced by the `InputPayload` contract before any analysis runs. |
+| **Rate limiting.** | `core/rate_limit.py` applies a per-IP sliding window (`RATE_LIMIT_PER_MINUTE`, default 30) ahead of the work. |
+| **Keys stay server-side.** | Provider keys are read from the backend environment only. The frontend has no `NEXT_PUBLIC_*` variable and never receives a key; the browser only talks to the Next.js origin. |
+| **Header auth.** | Both threat-intel providers authenticate by header because request URLs leak into client/proxy logs. |
+| **No dynamic execution.** | No `eval`, `exec`, `pickle` on untrusted data or shell interpolation of user input; the only subprocess is a `tesseract` invocation with a fixed argument vector. |
+| **Path safety.** | `sanitize_filename` strips path components and unsafe characters; stored names are generated, never user-controlled. |
+| **CORS.** | Explicit origin list, `allow_credentials=False`; no wildcard in the defaults. |
+
+---
+
+## 14. Failure handling
+
+Failures are classified by what they mean for the *evidence*, not by whether code threw:
+
+| Failure | Handling | Effect on risk |
+|---|---|---|
+| Provider HTTP error / exception / timeout | Converted to a normalised non-verdict (`status=error` / `unavailable`, `verdict=unknown`) by the manager's `_safe_check` wrapper | **None** — no information neither raises nor lowers the score |
+| Provider rate limit | `status=rate_limited`, visible per provider | None; never treated as clean |
+| OCR unavailable | Empty text + warning + `ocr_mock` evidence | None |
+| ML artifact missing/unreadable | Deterministic heuristic fallback, labelled as a heuristic rather than a model prediction | The ML channel is not credited as a model result |
+| LLM failure or missing key | Deterministic template explanation | None — the explanation is not part of the decision |
+| A workflow node raises | `run_investigation` records `status="failed"` plus the error and a coherent timeline instead of propagating | The investigation is reported as failed rather than mis-scored |
+| Bad upload / bad contract | `400` from the API before the workflow starts | No investigation is created |
+
+The unifying rule: **a degradation is always visible and never silently improves a verdict.**
+
+---
+
+## 15. Observability and logging
+
+- `core/logging.py` installs a single-line JSON formatter (`ts`, `level`, `logger`, `msg`, optional
+  `exc`, plus `extra_fields`) on the root logger; level is `DEBUG` only when `DEBUG=true`.
+- Every investigation logs through `investigation_logger(id)`, which binds the `investigation_id` as an
+  extra field, so one submission's lines can be filtered from a busy stream.
+- **Message bodies are never logged.** Code paths log identifiers, stage names, counts and provider
+  statuses — not user content.
+- `httpx`, `httpcore`, `urllib3` and `asyncio` are pinned to `WARNING` because their request logs
+  contain full URLs, which can carry a credential in a query parameter and always carry the
+  user-submitted link.
+- `/api/health` is the operational truth source: it reports the **effective** provider modes
+  (`is_mock` / `uses_mock` / OCR provider / LLM provider), so a misconfigured deployment is visible
+  from outside instead of surfacing as unexplained low-risk results.
+- The timeline (`analysis_results`) is the durable, per-stage record returned to the UI.
+
+---
+
+## 16. Frontend and backend interaction
+
+The browser only ever talks to the **frontend origin**. `next.config.mjs` rewrites `/api/:path*` to
+`${BACKEND_URL}/api/:path*` (default `http://localhost:8000`), which means no CORS setup is needed
+for the UI and no backend URL or key is exposed to client code.
+
+| Concern | Where it lives |
+|---|---|
+| API client | `frontend/lib/` — typed calls to the `/api` paths |
+| Pages | `/` (landing), `/investigate`, `/dashboard`, `/history`, `/results/[id]` |
+| Result rendering | The result page renders the risk gauge, evidence groups and timeline; the "Why this score?" panel is driven by the `RiskContributor` rows, and mock/demo state is shown explicitly rather than hidden |
+| Styling | Tailwind CSS; `lucide-react` for icons |
+
+The API surface consumed by the UI: `GET /api/health`, `POST /api/investigations`,
+`GET /api/investigations`, `GET /api/investigations/{id}`, `DELETE /api/investigations/{id}`,
+`POST /api/analyze`, and the demo routes under `/api/demo`.
+
+---
+
+## 17. Deployment architecture
+
+Three services, two supported database paths, one honest caveat per path.
+
+| Concern | Local (verified) | Container / cloud (unverified here) |
+|---|---|---|
+| Store | SQLite at `backend/data/app.db` | PostgreSQL 16 via `postgresql+asyncpg://` |
+| Backend | `uvicorn app.main:app` (port 8000) | `backend/Dockerfile` (`python:3.13-slim` + `tesseract-ocr`) |
+| Frontend | `next dev -p 3000` / `next start` | Node host with `BACKEND_URL` pointing at the backend |
+| Orchestration | Two terminals | `docker-compose.yml` (postgres + backend + frontend) |
+| Schema | `create_tables()` in the lifespan | Same; no migration tool |
+
+**Verification status, stated plainly.** SQLite, the FastAPI app, the LangGraph workflow, the ML
+artifact, the frontend build and the live Safe Browsing / VirusTotal / Gemini / Tesseract integrations
+were executed and verified locally. The **PostgreSQL code path is preserved but was not configured or
+verified** in this environment, and **the Docker path was not exercised** because the Docker CLI was
+not available. Nothing in this document should be read as a claim that a container deployment or a
+PostgreSQL instance has been run.
+
+Operational consequences worth designing around:
+
+- The request is **synchronous** and provider latency is in the request path, so a slow upstream
+  directly lengthens a user-visible call; there is no queue to absorb it.
+- The backend holds no session state beyond the database, so it scales horizontally — but SQLite is
+  single-writer, so multi-replica deployments require PostgreSQL.
+- The `/api/health` provider block is the fastest way to confirm a deployment is actually wired to the
+  keys it claims to have.
