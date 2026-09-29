@@ -124,8 +124,10 @@ why changing rule matching requires retraining the shipped classifier (see [§8]
    default 30) before any work happens.
 2. **Upload validation** — `core/security.py::read_image_upload` reads at most
    `MAX_UPLOAD_MB + 1` bytes, rejects empty/oversized files, and requires Pillow to decode the
-   bytes (the declared content type is ignored). A pixel-count cap guards against decompression
-   bombs. The validated bytes are then held **in memory** for the request and never written to disk:
+   bytes (the declared content type is ignored). A 64 M-pixel cap then rejects oversized images — note
+   that it is checked **after** `image.load()`, so it limits what is accepted rather than preventing the
+   decode, and Pillow's own `DecompressionBombError` (above ~178 M pixels) is not converted to a `400`.
+   The validated bytes are then held **in memory** for the request and never written to disk:
    no upload file is created, so there is nothing to clean up and no user-influenced name reaches the
    filesystem. (`core/security.py` also defines `persist_upload`, which would generate a `uuid4` name
    with an allow-listed extension, but **no route calls it**.)
@@ -471,7 +473,7 @@ PostgreSQL 16 via `postgresql+asyncpg://` is the compose/cloud path and requires
 | Boundary | Enforcement |
 |---|---|
 | **No SSRF.** | The server never fetches a user-supplied URL. URLs are parsed structurally and sent to reputation providers as *values*; there is no `requests.get(user_input)` path anywhere. |
-| **Upload safety.** | `core/security.py::read_image_upload` caps bytes at `MAX_UPLOAD_MB + 1`, rejects empty files, ignores the declared content type and requires Pillow to decode the bytes, and rejects images above a 64 M-pixel cap (decompression bombs). Nothing is written to disk — the bytes are used in memory and discarded. |
+| **Upload safety.** | `core/security.py::read_image_upload` caps bytes at `MAX_UPLOAD_MB + 1`, rejects empty files, ignores the declared content type and requires Pillow to decode the bytes, and rejects images above a 64 M-pixel cap — applied after the decode, so it limits acceptance rather than preventing the decode. Nothing is written to disk; the bytes are used in memory and discarded. |
 | **Input limits.** | `MAX_TEXT_LENGTH` (50,000) and `MAX_URLS_PER_SUBMISSION` (20) are enforced by the `InputPayload` contract before any analysis runs. |
 | **Rate limiting.** | `core/rate_limit.py` applies a per-IP sliding window (`RATE_LIMIT_PER_MINUTE`, default 30) ahead of the work. |
 | **Keys stay server-side.** | Provider keys are read from the backend environment only. The frontend has no `NEXT_PUBLIC_*` variable and never receives a key; the browser only talks to the Next.js origin. |
