@@ -250,6 +250,10 @@ provider status and that no notice claims "no external API is configured" while 
       silences HTTP-client request logging, and no provider key is placed in a URL).
 - [ ] A monitored backup schedule for PostgreSQL.
 
+Threat model, residual risks and the privacy consequences of enabling live providers are in
+[`SECURITY.md`](SECURITY.md) — read [§6 Limitations and non-goals](SECURITY.md#6-known-limitations-and-non-goals)
+before exposing this service to any network.
+
 ---
 
 ## 10. Scaling notes

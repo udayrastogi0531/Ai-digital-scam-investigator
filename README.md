@@ -23,6 +23,7 @@ investigation report.
 [Repository](https://github.com/udayrastogi0531/Ai-digital-scam-investigator) ·
 [Architecture](docs/ARCHITECTURE.md) ·
 [Evaluation](docs/EVALUATION.md) ·
+[Security](docs/SECURITY.md) ·
 [Deployment](docs/DEPLOYMENT.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Contributing](docs/CONTRIBUTING_CHECKLIST.md)
@@ -648,6 +649,9 @@ frontend checks — lint configuration was deliberately not added just to report
 
 ## Security
 
+The threat model, the data-flow disclosure (what leaves the machine and when), and the explicit
+non-goals live in **[docs/SECURITY.md](docs/SECURITY.md)**. Summary of what is enforced:
+
 | Control | Implementation |
 |---|---|
 | **No SSRF surface** | URLs are analysed structurally and sent to reputation providers **by value**; the application never fetches user-supplied URLs |
@@ -664,7 +668,8 @@ frontend checks — lint configuration was deliberately not added just to report
 | **Secret containment** | `.env` is git-ignored (all variants); `.env.example` ships placeholders only |
 
 No "100% secure" claim is made: this is a local, single-tenant, self-hosted application without
-authentication or multi-user isolation — see [Limitations](#limitations).
+authentication or multi-user isolation — see [Limitations](#limitations) and the full non-goal list in
+[docs/SECURITY.md](docs/SECURITY.md#6-known-limitations-and-non-goals).
 
 ---
 
