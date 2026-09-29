@@ -226,17 +226,19 @@ provider status and that no notice claims "no external API is configured" while 
 
 ## 8. Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `/api/health` shows `llm.is_mock: true` | `LLM_PROVIDER` is `mock`, or `LLM_API_KEY` is empty | Set both; the key must be non-empty. |
-| `/api/health` shows `threat_intel.uses_mock: true` | Neither provider key is set | Set `GOOGLE_SAFE_BROWSING_API_KEY` and/or `VIRUSTOTAL_API_KEY`. |
-| `/api/health` shows `ocr.provider: "mock"` | Tesseract is not on `PATH` | Use the bundled Dockerfile, or install `tesseract-ocr`. |
-| LLM explanations look templated | The provider failed and the **deterministic fallback** was used — this is by design | Check backend logs for `LLM HTTP <code>`; a 404 usually means the model name is unavailable to your key, a 429 means quota. |
-| HTTP 429 from VirusTotal | Public API rate limit | Space out lookups; the provider maps 429 to `status: "rate_limited"` and never treats it as clean. |
-| Frontend loads but API calls 502 | `BACKEND_URL` wrong or backend down | Fix `BACKEND_URL` and redeploy; verify `/api/health` directly. |
-| Frontend pages show "not configured" while keys are set | Keys were set on the frontend service | Keys belong to the **backend** service only. |
-| `Untagged`/unexpected results after changing the model | The `.joblib` artifact must match the feature code | Retrain with `scripts/ml_training/train.py`. |
-| CORS error in a direct-to-backend setup | Origin not listed | Add it to `CORS_ORIGINS`. |
+Symptom-by-symptom guidance now lives in **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — installation,
+configuration and providers, misleading results, uploads and OCR, the frontend proxy, the database,
+test tooling, Windows specifics, and the Docker/PostgreSQL paths.
+
+Two checks answer most questions, and both are safe to run against a live deployment:
+
+```bash
+curl -s https://<backend-host>/api/health | python -m json.tool   # which providers are really live
+curl -s https://<frontend-host>/ -o /dev/null -w '%{http_code}\n'  # the proxy is up
+```
+
+`/api/health` reports **effective** state: `is_mock` / `uses_mock` mean the integration is not
+configured, and `demo_mode: true` means both the LLM and threat intel are running as mocks.
 
 ---
 
