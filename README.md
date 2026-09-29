@@ -10,7 +10,7 @@ intelligence — aggregated by a **deterministic risk engine** into an explainab
 investigation report.
 
 ![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-REST_API-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agentic_AI-111827?style=for-the-badge)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?style=for-the-badge&logo=next.js&logoColor=white)
@@ -557,8 +557,14 @@ npm run dev                      # http://localhost:3000
 ```
 
 The Next dev server proxies `/api/*` to `http://localhost:8000` (`BACKEND_URL` overrides the target),
-so the browser only ever talks to the frontend origin. API keys are optional: copy `.env.example` to
-`backend/.env` and fill in whichever providers you have.
+so the browser only ever talks to the frontend origin. **No keys are required** — the default is fully
+offline demo mode.
+
+To enable providers, copy `backend/.env.example` to `backend/.env` and fill in only what you have.
+Leave `DATABASE_URL` unset so the verified local SQLite store is used: the repository's root
+`.env.example` is the **docker-compose template**, and it points `DATABASE_URL` at the containerised
+PostgreSQL — copying that one wholesale makes a local run try to reach a database that is not there.
+`frontend/.env.local.example` is optional too (the backend is already reachable on port 8000).
 
 **Docker (PostgreSQL + backend + frontend)** — configuration is included but **unverified here**
 (no Docker CLI in this environment):
@@ -572,8 +578,9 @@ docker compose up --build
 
 ## Environment variables
 
-Names and defaults only — never values. Full reference: `backend/app/core/config.py` and
-`.env.example`. `backend/.env` is git-ignored and must never be committed.
+Names and defaults only — never values. Full reference: `backend/app/core/config.py`, with templates at
+`backend/.env.example` (local, SQLite-first — the one to copy for a local run) and `.env.example` at the
+repository root (docker-compose). `backend/.env` is git-ignored and must never be committed.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -753,14 +760,15 @@ AI-digital-scam-investigator/
 │   │   ├── datasets/       Real UCI SMS corpus + synthetic set + provenance + training report
 │   │   └── evaluation/     evaluation_cases.json — the 64-case calibration corpus
 │   ├── scripts/            evaluate_detection.py · end_to_end_smoke.py · ml_training/
-│   └── tests/              Hermetic pytest suites + opt-in live OCR / intel / LLM suites
+│   ├── tests/              Hermetic pytest suites + opt-in live OCR / intel / LLM suites
+│   └── .env.example        Local env template (SQLite-first; shows every optional key)
 ├── frontend/
 │   ├── app/                / · /dashboard · /investigate · /history · /results/[id]
 │   ├── components/         Shell, landing, investigation views, UI primitives
 │   └── lib/                API client + shared types
 ├── docs/                   ARCHITECTURE · EVALUATION · API · SECURITY · DEPLOYMENT · ROADMAP · CONTRIBUTING
 ├── docker-compose.yml      postgres + backend + frontend (configuration; unverified here)
-└── .env.example            Documented placeholders (no secrets)
+└── .env.example            docker-compose env template (points DATABASE_URL at the postgres service)
 ```
 
 ---

@@ -61,7 +61,8 @@ Optional, and never required for a normal contribution:
 | `RUN_LIVE_INTEL_TESTS=1` / `RUN_LIVE_LLM_TESTS=1` / `RUN_LIVE_OCR_TESTS=1` | The opt-in live test suites |
 
 Keys belong in `backend/.env` (git-ignored) or the process environment — never in source, never in the
-frontend, never in a URL query parameter.
+frontend, never in a URL query parameter. Start from `backend/.env.example`, which leaves
+`DATABASE_URL` unset so the verified local SQLite store is used.
 
 ---
 

@@ -71,6 +71,10 @@ The backend reads `backend/.env` (see `backend/app/core/config.py`); real enviro
 present in the process take precedence over that file, which is how container hosts inject them.
 `backend/.env` is git-ignored and must never be committed.
 
+Start from a template rather than from scratch: `backend/.env.example` for local work (it deliberately
+leaves `DATABASE_URL` unset so the app uses SQLite), and the **root** `.env.example` for the compose
+stack (where `DATABASE_URL` must point at the `postgres` service name, not `localhost`).
+
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | Production | `postgresql+asyncpg://USER:PASSWORD@HOST:5432/DB`. Omit locally to use SQLite. |
