@@ -229,4 +229,4 @@ expectations calibrated accordingly:
 - Do not paste real API keys, real user message content, or live credentials into an issue. Redact them.
 
 For ordinary correctness bugs — including detection-quality problems — a normal GitHub issue is the right
-channel; see [`CONTRIBUTING_CHECKLIST.md`](CONTRIBUTING_CHECKLIST.md).
+channel; see [`CONTRIBUTING.md`](CONTRIBUTING.md).

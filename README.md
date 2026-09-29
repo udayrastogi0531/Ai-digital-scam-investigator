@@ -27,7 +27,7 @@ investigation report.
 [Security](docs/SECURITY.md) ·
 [Deployment](docs/DEPLOYMENT.md) ·
 [Roadmap](docs/ROADMAP.md) ·
-[Contributing](docs/CONTRIBUTING_CHECKLIST.md)
+[Contributing](docs/CONTRIBUTING.md)
 
 > **Project status:** an actively engineered, portfolio-grade system demonstrating agentic
 > investigation architecture. Detection is **probabilistic decision support**, not a guarantee, and
@@ -758,7 +758,7 @@ AI-digital-scam-investigator/
 │   ├── app/                / · /dashboard · /investigate · /history · /results/[id]
 │   ├── components/         Shell, landing, investigation views, UI primitives
 │   └── lib/                API client + shared types
-├── docs/                   ARCHITECTURE · DEPLOYMENT · ROADMAP · CONTRIBUTING_CHECKLIST
+├── docs/                   ARCHITECTURE · EVALUATION · API · SECURITY · DEPLOYMENT · ROADMAP · CONTRIBUTING
 ├── docker-compose.yml      postgres + backend + frontend (configuration; unverified here)
 └── .env.example            Documented placeholders (no secrets)
 ```
@@ -852,7 +852,8 @@ Contributions are welcome. Before opening a pull request:
 4. **Keep documentation true** — update the README and docs when behaviour, configuration or metrics
    change, and never present calibration numbers as real-world accuracy.
 
-The detailed checklist lives in [docs/CONTRIBUTING_CHECKLIST.md](docs/CONTRIBUTING_CHECKLIST.md).
+The full contributor guide — repository map, gates by change type, invariant list, and the review
+checklist — is [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ---
 
