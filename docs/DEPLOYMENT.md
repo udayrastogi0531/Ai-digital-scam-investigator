@@ -15,6 +15,27 @@ This guide covers deploying the two application services and their data store.
 > from this environment, and the Docker path could not be exercised because the Docker CLI is not
 > installed here.
 
+## Status legend
+
+Every path in this guide carries one of three labels. They are not decoration: each records what was
+actually executed, so a reader can tell a tested path from a documented intention.
+
+| Label | Meaning |
+|---|---|
+| **VERIFIED** | Executed in the development environment: the backend and frontend ran, SQLite persisted real investigations over HTTP, and the live Safe Browsing / VirusTotal / Gemini / Tesseract integrations were exercised. |
+| **NOT VERIFIED** | Configured and documented, but never executed here. The PostgreSQL path and every Docker command fall in this category — the Dockerfiles and compose file have not been run. |
+| **OPTIONAL** | Not required to run the project; enabling it changes behaviour visibly rather than silently. |
+
+| Path | Label |
+|---|---|
+| Local SQLite + `uvicorn` + `next dev` | **VERIFIED** |
+| Live provider keys (Safe Browsing, VirusTotal, Gemini, Tesseract) | **VERIFIED** |
+| PostgreSQL 16 via `DATABASE_URL` | **NOT VERIFIED** |
+| `docker compose config/build/up` | **NOT VERIFIED** |
+| Cloud deployment (Vercel / Railway / Render / Fly.io) | **NOT VERIFIED** — an intended path, not a performed deployment |
+| Live LLM on an OpenAI-compatible endpoint | **VERIFIED** for Gemini's endpoint; **NOT VERIFIED** for any other provider |
+| Optional tuning (`LLM_TIMEOUT_SECONDS`, `RISK_WEIGHTS_PATH`, `DEBUG`, `CORS_ORIGINS`) | **OPTIONAL** |
+
 ---
 
 ## 1. Architecture at a glance
@@ -56,7 +77,7 @@ present in the process take precedence over that file, which is how container ho
 | `LLM_PROVIDER` | No | `mock` (default) or `openai_compatible`. |
 | `LLM_API_KEY` | For live LLM | Server-side only. |
 | `LLM_BASE_URL` | For live LLM | Any OpenAI-compatible `/v1` base. Gemini: `https://generativelanguage.googleapis.com/v1beta/openai`. |
-| `LLM_MODEL` | For live LLM | e.g. `gemini-3.5-flash-lite`, `gpt-4o-mini`. Never hardcoded in source. |
+| `LLM_MODEL` | For live LLM | The model id your key is entitled to; the code default is `gpt-4o-mini`. Check your provider's model list — an id your account cannot access usually surfaces as an HTTP 404 on first call. Never hardcoded in source. |
 | `LLM_TIMEOUT_SECONDS` | No | Default `45`. |
 | `GOOGLE_SAFE_BROWSING_API_KEY` | For live intel | Sent as the `x-goog-api-key` **header**, never as a query parameter. |
 | `VIRUSTOTAL_API_KEY` | For live intel | Sent as the `x-apikey` header. |
@@ -80,7 +101,7 @@ present in the process take precedence over that file, which is how container ho
 ### 2.3 Where keys go — and where they must not
 
 - Put keys in the **backend** environment (or `backend/.env` locally). Never in the frontend.
-- Never commit `.env` / `.env.local`; `.gitignore` excludes them (`*.env`, `!*.example`).
+- Never commit an env file. `.gitignore` excludes `.env`, `.env.local`, `.env.*` and `*.env`, while `!*.example` keeps the `*.env.example` templates tracked. Verify with `git check-ignore -v backend/.env` before you push.
 - Never pass an API key as a URL query parameter — request URLs are logged by HTTP clients and
   proxies. The Safe Browsing provider deliberately authenticates by header for this reason.
 
