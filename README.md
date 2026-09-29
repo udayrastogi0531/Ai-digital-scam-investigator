@@ -23,6 +23,7 @@ investigation report.
 [Repository](https://github.com/udayrastogi0531/Ai-digital-scam-investigator) ·
 [Architecture](docs/ARCHITECTURE.md) ·
 [Evaluation](docs/EVALUATION.md) ·
+[API](docs/API.md) ·
 [Security](docs/SECURITY.md) ·
 [Deployment](docs/DEPLOYMENT.md) ·
 [Roadmap](docs/ROADMAP.md) ·
@@ -604,7 +605,8 @@ Names and defaults only — never values. Full reference: `backend/app/core/conf
 
 ## API
 
-All routes are mounted under `/api` (interactive docs at `/docs` while the server runs).
+All routes are mounted under `/api` (interactive docs at `/docs` while the server runs). Full request
+and response reference, including error semantics and a worked walkthrough: **[docs/API.md](docs/API.md)**.
 
 | Method | Path | Purpose |
 |---|---|---|
