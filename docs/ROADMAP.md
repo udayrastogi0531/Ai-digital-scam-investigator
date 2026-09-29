@@ -16,7 +16,7 @@ repository contains — configuration that has never been run is configuration, 
 | Verified PostgreSQL path | The code path and compose file exist, but PostgreSQL was never exercised here, so the claim stays "not verified" | `docker compose up --build` (or a managed instance) has been run, the full E2E smoke passes against it, and the docs can say so |
 | Exercised Docker path | The Dockerfiles and compose file are untested here because the CLI was unavailable | `docker compose config`, `build` and `up` succeed, OCR works from the image's bundled Tesseract, and the health check reports it |
 | Tests for upload rejection branches | Oversized files, non-image bytes and the pixel-bomb cap are implemented but covered only by inspection, and the same is true of the no-SSRF guarantee | Dedicated tests fail if a rejection path or the no-fetch property regresses |
-| Upload lifecycle cleanup | Stored screenshots currently outlive the investigation they belong to, which is a privacy wart | Deleting an investigation removes its stored image, with a test |
+| Remove the unused upload-storage helper | `core/security.py::persist_upload` writes an upload to disk but no route calls it, so it is dead code that invites a future change to enable persistence without a cleanup path | The helper is either deleted, or wired in together with image lifecycle handling and a test |
 | Retention and data-deletion tooling | There is no expiry policy or operator-facing way to purge history | A documented, configurable retention path exists and is tested |
 
 ---

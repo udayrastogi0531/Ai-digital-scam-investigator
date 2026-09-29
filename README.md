@@ -693,7 +693,7 @@ non-goals live in **[docs/SECURITY.md](docs/SECURITY.md)**. Summary of what is e
 | **Credential hygiene in requests** | Keys travel in headers (`x-goog-api-key`, `x-apikey`), never as URL query parameters, so they cannot leak into proxy or access logs |
 | **Upload validation** | The declared content type is not trusted: bytes are sniffed and decoded with Pillow, and unreadable files are rejected |
 | **Size and dimension caps** | `MAX_UPLOAD_MB` (10 MB) enforced via a bounded read, plus a pixel-count cap for decompression-bomb protection |
-| **Safe storage** | Uploaded images are stored under `uuid4` filenames in a git-ignored directory; the client filename is sanitised and never used as a path |
+| **Screenshots are not persisted** | An upload is decoded and analysed **in memory** only — no file is written, so there is no stored image to leak, and the client filename never reaches the filesystem |
 | **Input limits** | `MAX_TEXT_LENGTH` (50,000 characters) and `MAX_URLS_PER_SUBMISSION` (20) |
 | **Rate limiting** | Per-IP sliding-window limit on `POST /api/investigations` (`RATE_LIMIT_PER_MINUTE`, default 30), `x-forwarded-for`-aware |
 | **Provider fail-safety** | Outages, timeouts, rate limits and unusable inputs are *no information* — never a clean verdict, and never a reason to lower risk |

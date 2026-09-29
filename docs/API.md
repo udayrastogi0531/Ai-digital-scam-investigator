@@ -185,7 +185,8 @@ curl -s 'http://localhost:8000/api/investigations?page=1&page_size=20&risk_level
 # Full detail (drives the /results/[id] page)
 curl -s http://localhost:8000/api/investigations/<id>
 
-# Delete (204 on success, 404 when absent). Does not remove the stored screenshot file.
+# Delete (204 on success, 404 when absent). There is no stored screenshot to remove —
+# uploads are analysed in memory and never written to disk.
 curl -s -X DELETE http://localhost:8000/api/investigations/<id> -o /dev/null -w '%{http_code}\n'
 ```
 
