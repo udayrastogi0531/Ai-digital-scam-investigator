@@ -26,6 +26,15 @@ removing the places where a reader could draw a wrong conclusion.
 | `467091a` | `docs/FAQ.md` — the sceptical questions (is 100% real, why is precision 0.67, is a URL fetched, is a screenshot stored) |
 | `e24b139` | `docs/PROVIDERS.md` — threat-intel and LLM contracts, merge semantics, scoring, extension checklist |
 | `ed005ae` | `docs/GLOSSARY.md` — the vocabulary, with the file that defines each term |
+| `2929129` | `docs/CHANGELOG.md` — this file |
+
+**Test suites added** (the suite grew from 180 to 198 passing tests)
+
+| Commit | Added |
+|---|---|
+| `0603bd8` | `tests/test_upload_security.py` — every upload-rejection branch, plus an assertion that a valid upload leaves no file on disk. Exposed two gaps: the 64 M-pixel cap is applied *after* Pillow decodes, and Pillow's `DecompressionBombError` (derived from `Exception`, not `OSError`) surfaces as a server error instead of a `400` |
+| `42d3027` | `tests/test_ssrf_guard.py` — the no-SSRF property asserted behaviourally rather than inferred: every outbound request during a submission of internal addresses is captured, and only reputation hosts may appear |
+| `f462c9e` | `tests/test_rate_limit.py` — the limiter had no coverage at all: client keying, the `429`, window rollover and per-client isolation |
 
 **Rebuilt**
 
@@ -50,6 +59,14 @@ removing the places where a reader could draw a wrong conclusion.
   where the requirement floor read as a pin.
 - `23cea49` — the two live test rows are now labelled as recorded acceptance-run observations rather
   than a promise about the reader's environment.
+- `f198bac` — **screenshots are not stored on disk.** Three documents claimed uploads were written to a
+  git-ignored directory under a `uuid4` name, and two promised a cleanup task to delete those files.
+  Neither was true: `core/security.py` defines `persist_upload` but no route calls it, and the live path
+  keeps the image in memory for the request only. The imagined storage and its lifecycle problem are
+  gone, replaced by the real property and by the real open issue — an unused helper that would need a
+  lifecycle before it could be enabled.
+- `ea80394` — the six new pages added to the documentation map, the project-structure tree and the
+  contributing guide's "update the affected doc" list.
 
 ## 2026-09-28 — detection correctness
 
