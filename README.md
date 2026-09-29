@@ -39,6 +39,7 @@ investigation report.
 
 ## Table of contents
 
+- [Documentation map](#documentation-map)
 - [Project snapshot](#project-snapshot)
 - [The problem](#the-problem)
 - [The solution](#the-solution)
@@ -63,6 +64,25 @@ investigation report.
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License and author](#license-and-author)
+
+---
+
+## Documentation map
+
+Every document in this repository, and the question it answers:
+
+| Document | Answers |
+|---|---|
+| [README](README.md) | What is this, why does it matter, what does it use, and how do I run it? |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How is the system actually built, and which invariants are enforced in code rather than by convention? |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | How is detection measured, how do I reproduce it, and what do the numbers *not* mean? |
+| [docs/API.md](docs/API.md) | What are the endpoints, contracts, response shapes and error semantics? |
+| [docs/SECURITY.md](docs/SECURITY.md) | What is the threat model, what leaves the machine, and what is explicitly not covered? |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How do I deploy this — and which paths were actually verified versus only configured? |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Where does a change belong, which gates must pass, and what will not be merged? |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is planned, what is the acceptance gate for each item, and what is deliberately not planned? |
+| [backend/data/datasets/README.md](backend/data/datasets/README.md) | Where does the training data come from, and what are its limits? |
+| [LICENSE](./LICENSE) | MIT — © 2026 Uday Prakash Rastogi |
 
 ---
 
@@ -643,6 +663,11 @@ and response reference, including error semantics and a worked walkthrough: **[d
 | Frontend build (`from frontend/`) | `npm run build` | PASS — every app route compiles and prerenders |
 | Live threat intel + LLM (opt-in) | `RUN_LIVE_INTEL_TESTS=1 RUN_LIVE_LLM_TESTS=1 … -m pytest tests/test_threat_intel_live.py -q` | 4 passed with real keys |
 | Live OCR (opt-in) | `RUN_LIVE_OCR_TESTS=1 … -m pytest tests/test_ocr_live.py -q` | 7 passed with system Tesseract |
+
+The two live rows are **recorded results from the acceptance run**, not a promise about your
+environment: they need real credentials (or a system Tesseract) and are never part of the default
+suite. The rows above them were re-run for the current revision, except the training row, whose
+committed held-out report was re-verified rather than regenerated.
 
 **The offline suites are hermetic.** `tests/conftest.py` pins every provider to its deterministic
 mock implementation, so a developer's `backend/.env` containing real keys can *never* turn `pytest`
