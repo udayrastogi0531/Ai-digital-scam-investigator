@@ -83,7 +83,7 @@ Two boundary decisions shape almost every control below:
 | Screenshots are never written to disk | `core/security.py::read_image_upload` returns validated bytes that live only in memory for the duration of the request | No upload file exists to leak, and no cleanup path is needed. `persist_upload` is also defined in `core/security.py` but is **not called by any route** |
 | Input limits | `schemas/evidence.py::InputPayload`, route `Form(max_length=50_000)` | Text length, URL count, blank-URL stripping |
 | Empty-submission rejection | `api/routes/investigations.py` | `422` when no text, no URL and no image are supplied |
-| Rate limiting | `core/rate_limit.py` | In-memory sliding window on submission/demo routes, `x-forwarded-for`-aware |
+| Rate limiting | `core/rate_limit.py` | In-memory sliding window on submission/demo routes, `x-forwarded-for`-aware. Limit, rollover and per-client isolation covered by `tests/test_rate_limit.py` |
 | Secret handling | `core/config.py` | Keys read from the environment or `backend/.env`; nothing hardcoded; no `NEXT_PUBLIC_*` variable exists, so no key can reach the browser |
 | Header authentication | `intelligence/google_safe_browsing.py`, `intelligence/virustotal.py` | Keys never appear in a request URL |
 | Logging hygiene | `core/logging.py` | Single-line JSON, identifiers and statuses only; no message bodies; noisy HTTP-client loggers silenced |
@@ -179,8 +179,9 @@ Listed deliberately, because an undocumented limitation is indistinguishable fro
 - **No coverage for some security code paths.** Upload *rejection* branches (oversized file,
   non-image bytes, pixel-bomb) now have dedicated tests
   (`tests/test_upload_security.py`), and the no-SSRF property is asserted behaviourally by
-  `tests/test_ssrf_guard.py`, but Pillow's own `DecompressionBombError` is still not mapped to a clean
-  `400`, and the rate limiter has no test at all.
+  `tests/test_ssrf_guard.py`, and the limiter's client keying and `429` behaviour by
+  `tests/test_rate_limit.py` — but Pillow's own `DecompressionBombError` is still not mapped to a clean
+  `400` (tracked in [ROADMAP.md](ROADMAP.md)).
 
 ---
 

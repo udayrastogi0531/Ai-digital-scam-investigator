@@ -27,7 +27,7 @@ Every command below is run from `backend/` with the venv interpreter
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest tests/ -q                     # 194 passed, 11 skipped
+.venv/Scripts/python.exe -m pytest tests/ -q                     # 198 passed, 11 skipped
 .venv/Scripts/python.exe scripts/evaluate_detection.py           # 64 cases, 0 FP, 0 FN, band 40/40
 .venv/Scripts/python.exe scripts/end_to_end_smoke.py              # 12/12 flows
 
@@ -46,7 +46,7 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 
 ## 2. Suite map
 
-205 tests are collected; 194 pass offline and 11 skip (the live suites).
+209 tests are collected; 198 pass offline and 11 skip (the live suites).
 
 | File | Tests | Covers |
 |---|---|---|
@@ -58,6 +58,7 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 | `test_api_integration.py` | 9 | Health, text/URL/image submissions, history filters, detail and delete roundtrip, empty-submission rejection |
 | `test_upload_security.py` | 12 | Every upload-rejection branch: empty, oversized, non-image bytes behind an image content type, the 64 M-pixel cap, filename sanitisation, no investigation created on rejection, and no file written to disk for a valid upload |
 | `test_ssrf_guard.py` | 2 | The no-SSRF property, behaviourally: every outbound request during a submission containing internal addresses is captured, and only the configured reputation hosts may appear |
+| `test_rate_limit.py` | 4 | The limiter directly: client key extraction (forwarded header preferred), the limit producing a `429`, the window reopening after a minute, and per-client isolation |
 | `test_patterns_risk.py` | 7 | Rule matching, category ranking, risk engine weighting and banding |
 | `test_ml_and_graph.py` | 4 | ML prediction shape and graph state wiring |
 | `test_ocr_live.py` | 7 | **Opt-in.** Real Tesseract contracts (skipped offline) |
@@ -105,7 +106,6 @@ Stated plainly, because an undocumented gap is indistinguishable from an oversig
 | **No frontend component or browser tests** | `typecheck` and `build` are the enforced frontend gates. Nothing asserts rendering, routing or interaction behaviour |
 | **Pillow's own bomb guard is unhandled** | Above ~178M pixels Pillow raises `DecompressionBombError`, which derives from `Exception` rather than `OSError`, so it is not converted to a `400`. The 64 M-pixel cap is also applied *after* the decode. Both are pinned by tests and tracked in the roadmap |
 | **No adversarial / evasion suite** | No attacker is adapting to these rules, so character substitution, image-only payloads and non-English social engineering are untested |
-| **No test for rate-limit behaviour** | The limiter is exercised only as a configured no-op; nothing asserts that exceeding it returns `429`, and the in-memory window is not tested at all |
 | **No latency, throughput or memory tests** | Request latency is dominated by live provider calls and is not characterised |
 | **No load or concurrency testing** | The rate limiter is in-process and SQLite is single-writer; neither is stress-tested |
 | **No dependency or licence audit** | Versions are pinned; nothing scans them for advisories |

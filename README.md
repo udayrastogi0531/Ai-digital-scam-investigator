@@ -17,7 +17,7 @@ investigation report.
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white)
 ![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-local_store-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-194_passing_%7C_11_skipped-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-198_passing_%7C_11_skipped-brightgreen?style=for-the-badge)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
 [Repository](https://github.com/udayrastogi0531/Ai-digital-scam-investigator) ·
@@ -654,7 +654,7 @@ and response reference, including error semantics and a worked walkthrough: **[d
 
 | Suite | Command (from `backend/`) | Verified result |
 |---|---|---|
-| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **194 passed**, 11 skipped |
+| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **198 passed**, 11 skipped |
 | Detection calibration | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64 cases · F1 1.0 · 0 FP · 0 FN · band 40/40 · 0 errors |
 | End-to-end smoke | `.venv/Scripts/python.exe scripts/end_to_end_smoke.py` | **12/12** flows |
 | ML training + held-out report | `.venv/Scripts/python.exe scripts/ml_training/train.py --dataset data/datasets/real/sms_spam_uci.csv --no-categories` | metrics in [Evaluation](#evaluation) |
@@ -695,7 +695,7 @@ non-goals live in **[docs/SECURITY.md](docs/SECURITY.md)**. Summary of what is e
 | **Size and dimension caps** | `MAX_UPLOAD_MB` (10 MB) enforced via a bounded read, plus a 64 M-pixel dimension cap. Note the cap is applied *after* Pillow decodes the bytes, so it limits acceptance rather than preventing the decode — [SECURITY.md](docs/SECURITY.md#2-threat-model) states the residual risk |
 | **Screenshots are not persisted** | An upload is decoded and analysed **in memory** only — no file is written, so there is no stored image to leak, and the client filename never reaches the filesystem |
 | **Input limits** | `MAX_TEXT_LENGTH` (50,000 characters) and `MAX_URLS_PER_SUBMISSION` (20) |
-| **Rate limiting** | Per-IP sliding-window limit on `POST /api/investigations` (`RATE_LIMIT_PER_MINUTE`, default 30), `x-forwarded-for`-aware |
+| **Rate limiting** | Per-IP sliding-window limit on `POST /api/investigations` (`RATE_LIMIT_PER_MINUTE`, default 30), `x-forwarded-for`-aware — behaviour covered by `tests/test_rate_limit.py` |
 | **Provider fail-safety** | Outages, timeouts, rate limits and unusable inputs are *no information* — never a clean verdict, and never a reason to lower risk |
 | **Logging hygiene** | Structured JSON logs deliberately exclude raw message bodies; HTTP-client request logging is silenced where credentials could appear in a URL |
 | **No dynamic execution** | No `eval`, `exec` or shell interpolation of user content anywhere in the codebase |
