@@ -268,4 +268,7 @@ before exposing this service to any network.
   in-process (LangGraph) — scale by adding replicas, not threads.
 - Live provider calls dominate latency (threat intel and LLM typically dominate a request; the
   offline path is ~milliseconds). Budget accordingly for concurrency and upstream rate limits.
+- Image/OCR concurrency is bounded **per process** (`MAX_CONCURRENT_IMAGE_OPS`, default 4), so the
+  effective ceiling across a fleet is the worker count × the limit. Size it against the host's memory:
+  a cap-sized upload needs roughly 192 MB of pixel buffer while it is decoding.
 - SQLite is single-writer: use PostgreSQL for any multi-replica deployment.

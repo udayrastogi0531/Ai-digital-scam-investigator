@@ -66,6 +66,11 @@ Two honest caveats: the limiter is **in-memory and per process**, so it resets o
 shared across replicas; and the client key comes from `x-forwarded-for` when present, which a client can
 spoof unless a trusted proxy sets or strips that header.
 
+Image submissions (`POST /api/analyze/image` and `POST /api/investigations` **with** an `image` part)
+are additionally bounded by an in-process concurrency gate: at most `MAX_CONCURRENT_IMAGE_OPS`
+(default 4) run at once, and a request beyond the cap gets **`503`** with a `Retry-After: 1` header
+instead of queueing. Text- and URL-only submissions are not affected. This cap is also per process.
+
 ---
 
 ## 3. Errors
@@ -82,6 +87,7 @@ Errors use FastAPI's standard envelope and are the only error shape you need to 
 | `404` | Unknown investigation id, unknown demo slug |
 | `422` | Validation failure — no input supplied, text over 50,000 characters, more than 20 URLs, or a malformed query parameter (e.g. an invalid `risk_level`) |
 | `429` | Rate limit exceeded |
+| `503` | Image processing is at capacity (`MAX_CONCURRENT_IMAGE_OPS`, default 4) — sent only on image submissions; retry after the `Retry-After` interval |
 | `500` | An unexpected failure during the run. The detail includes the underlying exception text, which is useful locally but verbose for a public deployment (a documented limitation, not a design goal) |
 
 Note that **an investigation that fails internally is not an HTTP error.** The request succeeds and the

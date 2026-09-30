@@ -226,9 +226,9 @@ impersonation or screenshot threat landscape. See [Evaluation](#evaluation).
 ### 👁️ OCR investigation
 
 `OCR_PROVIDER=auto` detects the system `tesseract` binary at startup (verified with
-`tesseract v5.5.3.20260724`). Screenshots are sniffed with Pillow, size- and dimension-capped,
-stored under random names, and never sent to an external service. Extracted text flows into the URL,
-text-signal, pattern and aggregation channels exactly like pasted text.
+`tesseract v5.5.3.20260724`). Screenshots are sniffed with Pillow, size- and dimension-capped, and
+analysed **in memory** — never written to disk, never sent to an external service. Extracted text flows
+into the URL, text-signal, pattern and aggregation channels exactly like pasted text.
 
 ### 🧮 Deterministic risk engine
 
@@ -253,7 +253,8 @@ dilution:
 ### 🛡️ Security engineering
 
 Server-side secrets, no SSRF surface, distrust of client-declared content types, bounded uploads that
-are never persisted to disk, an image-dimension cap, per-IP rate limiting, JSON logs that exclude raw
+are never persisted to disk, an image-dimension cap, bounded image concurrency, per-IP rate limiting,
+JSON logs that exclude raw
 message bodies, and no `eval`/`exec` anywhere. Details: [Security](#security).
 
 ---
@@ -701,6 +702,7 @@ non-goals live in **[docs/SECURITY.md](docs/SECURITY.md)**. Summary of what is e
 | **Size and dimension caps** | `MAX_UPLOAD_MB` (10 MB) enforced via a bounded read, plus a 64 M-pixel dimension cap. The dimensions come from the image header and are checked **before** the pixels are decoded, so an oversized image is rejected without being decompressed — and Pillow's own decompression-bomb guard is translated into the same `400` instead of escaping as a server error |
 | **Screenshots are not persisted** | An upload is decoded and analysed **in memory** only — no file is written, so there is no stored image to leak, and the client filename never reaches the filesystem |
 | **Input limits** | `MAX_TEXT_LENGTH` (50,000 characters) and `MAX_URLS_PER_SUBMISSION` (20) |
+| **Bounded image concurrency** | `MAX_CONCURRENT_IMAGE_OPS` (default 4) caps how many image investigations are decoded and OCR'd at once; a request beyond the cap is refused with a retryable `503` instead of piling up pixel memory, and the slot is always released. The limit is **per process** (a multi-worker deployment multiplies it by the worker count) — a safety valve, not a DDoS control. Covered by `tests/test_image_concurrency.py` |
 | **Rate limiting** | Per-IP sliding-window limit on `POST /api/investigations` (`RATE_LIMIT_PER_MINUTE`, default 30), `x-forwarded-for`-aware — behaviour covered by `tests/test_rate_limit.py` |
 | **Provider fail-safety** | Outages, timeouts, rate limits and unusable inputs are *no information* — never a clean verdict, and never a reason to lower risk |
 | **Logging hygiene** | Structured JSON logs deliberately exclude raw message bodies; HTTP-client request logging is silenced where credentials could appear in a URL |
@@ -777,7 +779,7 @@ AI-digital-scam-investigator/
 │   │   │                   correlate, classify, risk, explain, report)
 │   │   ├── analysis/       Linguistic text-signal rules
 │   │   ├── api/routes/     health · investigations · analyze · demo
-│   │   ├── core/           Config, logging, rate limiting, upload security
+│   │   ├── core/           Config, logging, rate limiting, image concurrency, upload security
 │   │   ├── extraction/     URL analysis, entity extractor, OCR adapter, text extractor
 │   │   ├── graph/          Typed InvestigationState + workflow builder
 │   │   ├── intelligence/   Provider interface, Safe Browsing, VirusTotal, demo, manager
@@ -829,8 +831,9 @@ Honest, current constraints:
   and untested in this environment.
 - **No cloud deployment exists** — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the intended,
   partly unverified paths.
-- **No authentication or multi-tenancy**: history is a single shared store, and the rate limiter is
-  in-process (a Redis-backed limiter is the production upgrade path).
+- **No authentication or multi-tenancy**: history is a single shared store, the rate limiter and the
+  image-concurrency cap are both in-process and per worker (a Redis-backed limiter is the production
+  upgrade path), and there is no measured capacity figure.
 - The system is **decision support** — it produces probabilistic, evidence-based assessments and
   never guarantees.
 

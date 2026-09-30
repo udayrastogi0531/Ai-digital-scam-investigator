@@ -9,6 +9,25 @@ optional scope such as `fix(patterns):`). See [CONTRIBUTING.md §10](CONTRIBUTIN
 
 ---
 
+## 2026-09-30 — bounded image concurrency
+
+- `fix(security): bound concurrent image processing` — the per-image 64 M-pixel cap did not bound how
+  many images could be decoded at once, so several individually-valid uploads could multiply the pixel
+  memory in flight. `core/concurrency.py` now admits at most `MAX_CONCURRENT_IMAGE_OPS` (default 4)
+  image investigations at a time, returns a retryable `503` (`Retry-After: 1`) when every slot is
+  taken, and releases the slot from a `finally`. The decode itself was moved off the event loop into a
+  worker thread. The bound is **per process**, documented as such rather than presented as a global
+  limit.
+- `test(security): cover image processing concurrency` — `tests/test_image_concurrency.py` (5 tests)
+  pins the configured limit, the `503` refusal, capacity recovery after completion, and slot release
+  after an exception and after a rejected upload.
+- `docs(security): document image resource limits` — README, ARCHITECTURE, SECURITY, TESTING,
+  TROUBLESHOOTING, ROADMAP and the env templates describe the gate, its environment variable and its
+  per-process scope.
+- The obsolete `persist_upload` helper was removed from `core/security.py`: it was never called by a
+  route (uploads are analysed in memory only), so it invited a future change to enable on-disk
+  persistence without a cleanup path. `sanitize_filename` is retained and now documented as unused.
+
 ## 2026-09-30 — upload hardening
 
 - `fix(security): harden image decompression handling` — the pixel cap in

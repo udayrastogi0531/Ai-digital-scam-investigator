@@ -16,7 +16,6 @@ repository contains — configuration that has never been run is configuration, 
 | Verified PostgreSQL path | The code path and compose file exist, but PostgreSQL was never exercised here, so the claim stays "not verified" | `docker compose up --build` (or a managed instance) has been run, the full E2E smoke passes against it, and the docs can say so |
 | Exercised Docker path | The Dockerfiles and compose file are untested here because the CLI was unavailable | `docker compose config`, `build` and `up` succeed, OCR works from the image's bundled Tesseract, and the health check reports it |
 | A shared rate-limit store | The limiter is per-process and in-memory, so limits reset on restart and do not apply across replicas; it also trusts a client-supplied `x-forwarded-for` | A Redis-backed or proxy-enforced limiter, with the trusted-hop configuration documented |
-| Remove the unused upload-storage helper | `core/security.py::persist_upload` writes an upload to disk but no route calls it, so it is dead code that invites a future change to enable persistence without a cleanup path | The helper is either deleted, or wired in together with image lifecycle handling and a test |
 | Retention and data-deletion tooling | There is no expiry policy or operator-facing way to purge history | A documented, configurable retention path exists and is tested |
 
 ---
@@ -29,6 +28,8 @@ unblocked.
 | Item | Completed | Evidence |
 |---|---|---|
 | Handle Pillow's bomb guard and move the dimension cap before the decode | The pixel cap is now read from the image header and compared **before** `image.load()`, so an oversized image is rejected without being decompressed; `DecompressionBombError`, `DecompressionBombWarning` and a decode-time `MemoryError` are converted to the same `400` instead of surfacing as a server error | `core/security.py::read_image_upload`; `tests/test_upload_security.py` (14 tests, including an assertion that `load()` is not reached for an oversized image) |
+| Bound concurrent image processing | A single image was capped at 64 M pixels, but nothing bounded how many could be decoded at once; the gate in `core/concurrency.py` admits `MAX_CONCURRENT_IMAGE_OPS` (default 4) image investigations at a time, returns a retryable `503` beyond it, releases the slot in a `finally`, and the decode now runs off the event loop | `core/concurrency.py`; `tests/test_image_concurrency.py` (5 tests); [SECURITY.md](SECURITY.md) §2/§3 |
+| Remove the unused upload-storage helper | `core/security.py::persist_upload` was dead code that would have written an upload to disk with no cleanup path; it was deleted, leaving no persistence path at all | `core/security.py` (helper removed — no route ever called it) |
 
 ---
 

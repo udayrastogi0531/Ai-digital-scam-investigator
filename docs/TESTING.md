@@ -46,7 +46,7 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 
 ## 2. Suite map
 
-209 tests are collected; 198 pass offline and 11 skip (the live suites).
+216 tests are collected; 205 pass offline and 11 skip (the live suites).
 
 | File | Tests | Covers |
 |---|---|---|
@@ -57,6 +57,7 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 | `test_extraction.py` | 10 | URL structure analysis, entity extraction, suspicious TLD/keyword handling |
 | `test_api_integration.py` | 9 | Health, text/URL/image submissions, history filters, detail and delete roundtrip, empty-submission rejection |
 | `test_upload_security.py` | 14 | Every upload-rejection branch: empty, oversized, non-image bytes behind an image content type, the 64 M-pixel cap (asserting the decode is never reached), Pillow's bomb error *and* bomb warning, a decode-time `MemoryError`, filename sanitisation, no investigation created on rejection, and no file written to disk for a valid upload |
+| `test_image_concurrency.py` | 5 | The bounded image-concurrency gate: the configured limit is respected, an in-flight investigation causes the next image request to get a retryable `503`, capacity is restored once it finishes, and the slot is released after an exception and after a rejected upload |
 | `test_ssrf_guard.py` | 2 | The no-SSRF property, behaviourally: every outbound request during a submission containing internal addresses is captured, and only the configured reputation hosts may appear |
 | `test_rate_limit.py` | 4 | The limiter directly: client key extraction (forwarded header preferred), the limit producing a `429`, the window reopening after a minute, and per-client isolation |
 | `test_patterns_risk.py` | 7 | Rule matching, category ranking, risk engine weighting and banding |
@@ -106,7 +107,7 @@ Stated plainly, because an undocumented gap is indistinguishable from an oversig
 | **No frontend component or browser tests** | `typecheck` and `build` are the enforced frontend gates. Nothing asserts rendering, routing or interaction behaviour |
 | **No adversarial / evasion suite** | No attacker is adapting to these rules, so character substitution, image-only payloads and non-English social engineering are untested |
 | **No latency, throughput or memory tests** | Request latency is dominated by live provider calls and is not characterised |
-| **No load or concurrency testing** | The rate limiter is in-process and SQLite is single-writer; neither is stress-tested |
+| **No load, throughput or memory testing** | The image-concurrency cap has behavioural tests but no stress test, no *measured* memory ceiling and no multi-worker characterisation; the rate limiter is in-process and SQLite is single-writer, and neither is stress-tested |
 | **No dependency or licence audit** | Versions are pinned; nothing scans them for advisories |
 
 ---

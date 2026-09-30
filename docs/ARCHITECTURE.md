@@ -122,8 +122,13 @@ why changing rule matching requires retraining the shipped classifier (see [§8]
 
 `POST /api/investigations` (multipart: `text`, `urls[]`, `title`, `source_label`, `image`):
 
-1. **Rate limit** — `core/rate_limit.py` applies a per-IP sliding window (`RATE_LIMIT_PER_MINUTE`,
-   default 30) before any work happens.
+1. **Rate limit and image gate** — `core/rate_limit.py` applies a per-IP sliding window
+   (`RATE_LIMIT_PER_MINUTE`, default 30) before any work happens. A submission that carries a
+   screenshot is *also* admitted through the in-process image-concurrency gate
+   (`core/concurrency.py`), which bounds how many decodes + pipelines run at once
+   (`MAX_CONCURRENT_IMAGE_OPS`, default 4) and returns a retryable `503` when every slot is taken,
+   rather than queueing work whose pixel buffers would add up. Text/URL-only submissions bypass the
+   gate.
 2. **Upload validation** — `core/security.py::read_image_upload` reads at most
    `MAX_UPLOAD_MB + 1` bytes, rejects empty/oversized files, and requires Pillow to decode the
    bytes (the declared content type is ignored). The pixel cap is enforced **before** the decode:
@@ -131,11 +136,11 @@ why changing rule matching requires retraining the shipped classifier (see [§8]
    step that allocates the pixel buffer — only runs once the image is known to be within it. Pillow's
    own guard is also translated: `DecompressionBombError` and `DecompressionBombWarning` derive from
    `Exception`, not `OSError`, so they are named explicitly and become the same `400` as every other
-   rejection rather than escaping as a server error.
+   rejection rather than escaping as a server error. The decode is CPU- and memory-bound, so it runs
+   in a worker thread (`run_in_executor`) and does not block the event loop.
    The validated bytes are then held **in memory** for the request and never written to disk:
    no upload file is created, so there is nothing to clean up and no user-influenced name reaches the
-   filesystem. (`core/security.py` also defines `persist_upload`, which would generate a `uuid4` name
-   with an allow-listed extension, but **no route calls it**.)
+   filesystem.
 3. **Contract validation** — `InputPayload` enforces `MAX_TEXT_LENGTH` (50,000) and
    `MAX_URLS_PER_SUBMISSION` (20) and strips blank URLs.
 4. **Persistence start** — `investigation_service.create_and_run` inserts the investigation row with
@@ -478,13 +483,14 @@ PostgreSQL 16 via `postgresql+asyncpg://` is the compose/cloud path and requires
 | Boundary | Enforcement |
 |---|---|
 | **No SSRF.** | The server never fetches a user-supplied URL. URLs are parsed structurally and sent to reputation providers as *values*; there is no `requests.get(user_input)` path anywhere. |
-| **Upload safety.** | `core/security.py::read_image_upload` caps bytes at `MAX_UPLOAD_MB + 1`, rejects empty files, ignores the declared content type and requires Pillow to decode the bytes. Dimensions are read from the header and compared against a 64 M-pixel cap **before** `load()` allocates the pixel buffer, so an oversized image is rejected without being decompressed; Pillow's `DecompressionBombError` / `DecompressionBombWarning` and a decode-time `MemoryError` are converted to the same `400`. Nothing is written to disk; the bytes are used in memory and discarded. |
+| **Upload safety.** | `core/security.py::read_image_upload` caps bytes at `MAX_UPLOAD_MB + 1`, rejects empty files, ignores the declared content type and requires Pillow to decode the bytes. Dimensions are read from the header and compared against a 64 M-pixel cap **before** `load()` allocates the pixel buffer, so an oversized image is rejected without being decompressed; Pillow's `DecompressionBombError` / `DecompressionBombWarning` and a decode-time `MemoryError` are converted to the same `400`. The decode runs in a worker thread, and the whole image submission is admitted through the bounded concurrency gate (below) so its pixel buffer cannot be multiplied without limit. Nothing is written to disk; the bytes are used in memory and discarded. |
 | **Input limits.** | `MAX_TEXT_LENGTH` (50,000) and `MAX_URLS_PER_SUBMISSION` (20) are enforced by the `InputPayload` contract before any analysis runs. |
 | **Rate limiting.** | `core/rate_limit.py` applies a per-IP sliding window (`RATE_LIMIT_PER_MINUTE`, default 30) ahead of the work. |
+| **Bounded image concurrency.** | `core/concurrency.py` admits at most `MAX_CONCURRENT_IMAGE_OPS` (default 4) image investigations at once and returns `503` otherwise; the slot is released in a `finally`. The counter is **per process**, so a multi-worker deployment multiplies the effective ceiling by the worker count — a memory safety valve, not a global or DDoS limit ([SECURITY.md](SECURITY.md) §2). |
 | **Keys stay server-side.** | Provider keys are read from the backend environment only. The frontend has no `NEXT_PUBLIC_*` variable and never receives a key; the browser only talks to the Next.js origin. |
 | **Header auth.** | Both threat-intel providers authenticate by header because request URLs leak into client/proxy logs. |
 | **No dynamic execution.** | No `eval`, `exec`, `pickle` on untrusted data or shell interpolation of user input; the only subprocess is a `tesseract` invocation with a fixed argument vector. |
-| **Path safety.** | `sanitize_filename` strips path components and unsafe characters; stored names are generated, never user-controlled. |
+| **Path safety.** | No route writes an upload to disk, so a user-influenced name never reaches the filesystem. `sanitize_filename` (unused today) strips path components and unsafe characters should one ever be handled. |
 | **CORS.** | Explicit origin list, `allow_credentials=False`; no wildcard in the defaults. |
 
 ---
