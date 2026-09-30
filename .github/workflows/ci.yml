@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Nothing here uses a paid service or a real API key.  Live-provider tests stay
+# opt-in and are skipped in CI (they need secrets nobody commits).
+
+jobs:
+  backend:
+    name: Backend (SQLite + PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: scaminv
+          POSTGRES_PASSWORD: scaminv
+          POSTGRES_DB: scaminv_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # A CI-only signing key: never a real secret, only there so tokens can be
+      # minted and verified during the run.
+      AUTH_SECRET_KEY: ci-signing-key-not-a-real-secret-32-bytes
+      OCR_PROVIDER: mock
+      LLM_PROVIDER: mock
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unit + integration tests (SQLite)
+        run: python -m pytest tests/ -q
+
+      - name: PostgreSQL integration tests
+        env:
+          RUN_POSTGRES_TESTS: "1"
+          POSTGRES_TEST_DATABASE_URL: postgresql+asyncpg://scaminv:scaminv@localhost:5432/scaminv_test
+        run: python -m pytest tests/test_postgres_integration.py -q
+
+      - name: Detection evaluation (assert baseline)
+        run: python scripts/evaluate_detection.py --assert-baseline
+
+      - name: End-to-end smoke
+        run: python scripts/end_to_end_smoke.py
+
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+  security:
+    name: Security & docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Ensure no .env file is tracked
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::a .env file is tracked — it must never be committed"
+            exit 1
+          fi
+
+      - name: Scan tracked files for key-shaped secrets
+        run: |
+          # Key-shaped tokens only.  Database URLs in docker-compose use
+          # `${VAR:-default}` interpolation and are intentionally not matched.
+          patterns='sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]{10,}'
+          if git ls-files -z | xargs -0 grep -InE "$patterns" -- 2>/dev/null \
+              | grep -vE '\.example:|README\.md|docs/'; then
+            echo "::error::possible committed secret (see match above)"
+            exit 1
+          fi
+          echo "no committed secrets matched"
+
+      - name: Documentation link check
+        run: python backend/scripts/check_doc_links.py
+
+      - name: Dependency audit (informational)
+        continue-on-error: true
+        working-directory: backend
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt || true
