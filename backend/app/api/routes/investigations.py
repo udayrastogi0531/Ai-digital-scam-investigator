@@ -6,6 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.concurrency import image_processing_slot
 from app.core.rate_limit import rate_limit
 from app.core.security import read_image_upload
 from app.database import get_db
@@ -52,8 +53,13 @@ async def create_investigation(
     payload = InputPayload(text=text, urls=urls, title=title, source_label=source_label)
     if not payload.text and not payload.urls and image is None:
         raise HTTPException(status_code=422, detail="Provide text, at least one URL, or an image.")
-    image_bytes = await read_image_upload(image) if image is not None else None
-    return await _run_submission(db, payload, image_bytes=image_bytes)
+    if image is None:
+        return await _run_submission(db, payload)
+    # A screenshot makes the decode + OCR expensive, so it is admitted through
+    # the bounded concurrency gate; text/URL-only submissions are unaffected.
+    async with image_processing_slot():
+        image_bytes = await read_image_upload(image)
+        return await _run_submission(db, payload, image_bytes=image_bytes)
 
 
 @router.get("", response_model=PaginatedInvestigations)

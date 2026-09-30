@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.investigations import _run_submission
+from app.core.concurrency import image_processing_slot
 from app.core.rate_limit import rate_limit
 from app.core.security import read_image_upload
 from app.database import get_db
@@ -36,6 +37,7 @@ async def analyze_image(
     title: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ) -> InvestigationSummary:
-    image_bytes = await read_image_upload(image)
-    payload = InputPayload(text=text, title=title)
-    return await _run_submission(db, payload, image_bytes=image_bytes)
+    async with image_processing_slot():
+        image_bytes = await read_image_upload(image)
+        payload = InputPayload(text=text, title=title)
+        return await _run_submission(db, payload, image_bytes=image_bytes)

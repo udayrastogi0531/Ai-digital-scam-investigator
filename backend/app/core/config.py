@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     max_text_length: int = 50_000
     max_urls_per_submission: int = 20
     rate_limit_per_minute: int = 30
+    # Bounds how many image investigations may run at once.  The per-IP rate
+    # limiter caps how *often* a client may submit; this caps how many
+    # individually-valid (and therefore memory-hungry) decodes/OCR runs can be
+    # in flight together.  It is enforced in-process, so it is a per-process
+    # limit — see ``app/core/concurrency.py``.
+    max_concurrent_image_ops: int = 4
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # --- Storage ---

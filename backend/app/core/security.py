@@ -1,14 +1,21 @@
-"""Security helpers: safe upload handling and filename sanitization.
+"""Security helpers: safe, in-memory upload handling.
 
 All user-supplied content is treated as untrusted:
-* size limits
-* MIME sniffing via Pillow (the declared content-type is not trusted)
-* filenames are never used as-is on disk
+
+* size limits (a bounded read, so an oversized body is never fully buffered)
+* real decoding via Pillow — the declared content-type is ignored
+* a pixel cap enforced from the image header *before* the pixels are decoded
+* nothing is ever written to disk
+
+``sanitize_filename`` is retained as a defensive helper for any future code
+that might handle a filename, but **no route writes an upload to disk**, so it
+is not on a live code path today.
 """
 from __future__ import annotations
 
+import asyncio
+import io
 import re
-import uuid
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
@@ -28,38 +35,33 @@ class UnsafeUploadError(HTTPException):
 
 
 def sanitize_filename(name: str) -> str:
-    """Strip path components and suspicious characters."""
+    """Strip path components and suspicious characters.
+
+    Currently unused by any route — uploads are never persisted — but kept as a
+    small, tested guard in case a filename ever needs to be handled.
+    """
     name = name or "upload"
     name = Path(name).name
     name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
     return name[:120] or "upload"
 
 
-async def read_image_upload(upload: UploadFile) -> bytes:
-    """Read an upload, enforcing size and validating that it is a real image.
+def _validate_image_bytes(data: bytes) -> None:
+    """Decode and validate raw image bytes.  **Blocking** — run off the loop.
 
-    Returns raw image bytes (validated).  Does NOT trust the content-type
-    header; Pillow must be able to decode the image.
+    Raises :class:`UnsafeUploadError` for every rejected input.  ``Image.open``
+    reads only the header, so ``image.size`` is known without allocating the
+    pixel buffer that ``load()`` would create; an oversized image is therefore
+    rejected before it is ever decompressed.
     """
-    settings = get_settings()
-    max_bytes = settings.max_upload_mb * 1024 * 1024
-    data = await upload.read(max_bytes + 1)
-    if len(data) > max_bytes:
-        raise UnsafeUploadError(f"File too large (max {settings.max_upload_mb} MB)")
-    if not data:
-        raise UnsafeUploadError("Empty file")
-
-    import io
-
     from PIL import Image, UnidentifiedImageError
 
     # ``DecompressionBombError`` derives from ``Exception`` — *not* from
-    # ``OSError`` — so it is invisible to the handler below unless it is named
-    # explicitly.  Left uncaught it escapes this function entirely and the
-    # client sees a 500 instead of a validation error.  Pillow raises it while
-    # reading the header (above ``Image.MAX_IMAGE_PIXELS`` it warns above
-    # ~89 M pixels, above twice that it raises), i.e. before any pixels are
-    # decoded.
+    # ``OSError`` — so it is invisible to a handler that only names ``OSError``.
+    # Left uncaught it escapes this function entirely and the client sees a 500
+    # instead of a validation error.  Pillow raises it while reading the header
+    # (above ``Image.MAX_IMAGE_PIXELS`` it warns above ~89 M pixels, above twice
+    # that it raises), i.e. before any pixels are decoded.
     _BOMB = (Image.DecompressionBombError, Image.DecompressionBombWarning)
 
     try:
@@ -70,9 +72,6 @@ async def read_image_upload(upload: UploadFile) -> bytes:
         raise UnsafeUploadError("Image is too large to process safely") from exc
 
     # Decompression-bomb protection, checked *before* the decode.
-    # ``Image.open`` reads only the header, so ``image.size`` is known without
-    # allocating the pixel buffer that ``load()`` would create; an oversized
-    # image is therefore rejected without ever being decompressed.
     if image.size[0] * image.size[1] > _MAX_PIXELS:
         raise UnsafeUploadError("Image dimensions are too large")
 
@@ -84,17 +83,25 @@ async def read_image_upload(upload: UploadFile) -> bytes:
         raise UnsafeUploadError("Image is too large to process safely") from exc
     except (OSError, ValueError) as exc:
         raise UnsafeUploadError("Uploaded file is not a valid image") from exc
-    return data
 
 
-async def persist_upload(upload: UploadFile) -> Path:
-    """Validate + store an uploaded image; returns the stored path."""
+async def read_image_upload(upload: UploadFile) -> bytes:
+    """Read an upload, enforcing size and validating that it is a real image.
+
+    Returns the raw image bytes (validated).  The declared content-type is not
+    trusted; Pillow must be able to decode the bytes.  The decode is CPU- and
+    memory-bound, so it runs in a worker thread and does not block the event
+    loop while it allocates the pixel buffer.
+    """
     settings = get_settings()
-    data = await read_image_upload(upload)
-    settings.upload_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(upload.filename or "image").suffix.lower() if upload.filename else ".png"
-    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
-        ext = ".png"
-    target = settings.upload_dir / f"{uuid.uuid4().hex}{ext}"
-    target.write_bytes(data)
-    return target
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    data = await upload.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise UnsafeUploadError(f"File too large (max {settings.max_upload_mb} MB)")
+    if not data:
+        raise UnsafeUploadError("Empty file")
+
+    # ``run_in_executor`` returns/raises exactly what the callable did, so an
+    # ``UnsafeUploadError`` still reaches the client as a ``400``.
+    await asyncio.get_running_loop().run_in_executor(None, _validate_image_bytes, data)
+    return data
