@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.investigations import _run_submission
+from app.core.auth import get_current_user
 from app.core.concurrency import image_processing_slot
 from app.core.rate_limit import rate_limit
 from app.core.security import read_image_upload
 from app.database import get_db
+from app.models import User
 from app.schemas.api import InvestigationSummary
 from app.schemas.evidence import InputPayload
 
@@ -16,18 +18,25 @@ router = APIRouter(prefix="/analyze", tags=["analyze"], dependencies=[Depends(ra
 
 
 @router.post("/text", response_model=InvestigationSummary)
-async def analyze_text(payload: InputPayload, db: AsyncSession = Depends(get_db)) -> InvestigationSummary:
+async def analyze_text(
+    payload: InputPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> InvestigationSummary:
     if not payload.text and not payload.urls:
         raise HTTPException(status_code=422, detail="Provide 'text', 'urls', or both.")
-    return await _run_submission(db, payload)
+    return await _run_submission(db, payload, user_id=current_user.id)
 
 
 @router.post("/url", response_model=InvestigationSummary)
 async def analyze_url(
-    url: str = Form(...), title: str | None = Form(None), db: AsyncSession = Depends(get_db)
+    url: str = Form(...),
+    title: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> InvestigationSummary:
     payload = InputPayload(urls=[url], title=title)
-    return await _run_submission(db, payload)
+    return await _run_submission(db, payload, user_id=current_user.id)
 
 
 @router.post("/image", response_model=InvestigationSummary)
@@ -36,8 +45,9 @@ async def analyze_image(
     text: str | None = Form(None),
     title: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> InvestigationSummary:
     async with image_processing_slot():
         image_bytes = await read_image_upload(image)
         payload = InputPayload(text=text, title=title)
-        return await _run_submission(db, payload, image_bytes=image_bytes)
+        return await _run_submission(db, payload, image_bytes=image_bytes, user_id=current_user.id)

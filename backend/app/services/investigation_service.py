@@ -64,15 +64,21 @@ _INVESTIGATION_LOADS = (
 )
 
 
-async def _get_investigation(db: AsyncSession, investigation_id: str) -> Investigation | None:
-    """Fetch an investigation with all relationships eager-loaded.
+async def _get_investigation(
+    db: AsyncSession, investigation_id: str, user_id: str
+) -> Investigation | None:
+    """Fetch an investigation owned by ``user_id`` with relationships eager-loaded.
+
+    The ownership filter is part of the query, not a post-hoc check: a request
+    for someone else's investigation behaves exactly like a request for one
+    that does not exist (``None`` → 404), so existence is never leaked.
 
     ``db.get`` does not apply ``lazy="selectin"`` loaders, and touching an
     unloaded relationship on an async session raises ``MissingGreenlet``.
     """
     result = await db.execute(
         select(Investigation)
-        .where(Investigation.id == investigation_id)
+        .where(Investigation.id == investigation_id, Investigation.user_id == user_id)
         .options(*_INVESTIGATION_LOADS)
     )
     return result.scalar_one_or_none()
@@ -130,10 +136,13 @@ async def create_and_run(
     db: AsyncSession,
     payload: InputPayload,
     image_bytes: bytes | None = None,
+    *,
+    user_id: str,
 ) -> InvestigationSummary:
     """Create the investigation row, run the workflow, persist results."""
     text = (payload.text or "").strip()
     investigation = Investigation(
+        user_id=user_id,
         title=_title_from(payload, text),
         input_types=_derive_input_types(payload, image_bytes),
         raw_input_preview=truncate(text or "", 1000) or None,
@@ -147,7 +156,7 @@ async def create_and_run(
     result = await run_investigation(state)
 
     await _persist(db, investigation, result)
-    return await to_summary(db, investigation.id)
+    return await to_summary(db, investigation.id, user_id)
 
 
 def _provider_mode() -> str:
@@ -272,9 +281,11 @@ async def _persist(db: AsyncSession, investigation: Investigation, result: dict)
     await db.commit()
 
 
-async def to_summary(db: AsyncSession, investigation_id: str) -> InvestigationSummary:
-    """Build the API summary view for one investigation."""
-    investigation = await _get_investigation(db, investigation_id)
+async def to_summary(
+    db: AsyncSession, investigation_id: str, user_id: str
+) -> InvestigationSummary:
+    """Build the API summary view for one investigation owned by ``user_id``."""
+    investigation = await _get_investigation(db, investigation_id, user_id)
     if investigation is None:
         raise KeyError(f"investigation {investigation_id} not found")
     risk = investigation.risk
@@ -296,9 +307,11 @@ async def to_summary(db: AsyncSession, investigation_id: str) -> InvestigationSu
     )
 
 
-async def get_view(db: AsyncSession, investigation_id: str) -> InvestigationView:
-    base = await to_summary(db, investigation_id)
-    investigation = await _get_investigation(db, investigation_id)
+async def get_view(
+    db: AsyncSession, investigation_id: str, user_id: str
+) -> InvestigationView:
+    base = await to_summary(db, investigation_id, user_id)
+    investigation = await _get_investigation(db, investigation_id, user_id)
     if investigation is None:
         raise KeyError(f"investigation {investigation_id} not found")
     view = InvestigationView.model_validate(base.model_dump())
@@ -353,6 +366,7 @@ def _timeline_from_analyses(investigation: Investigation) -> list[dict]:
 async def list_investigations(
     db: AsyncSession,
     *,
+    user_id: str,
     page: int = 1,
     page_size: int = 20,
     search: str | None = None,
@@ -360,7 +374,8 @@ async def list_investigations(
     scam_type: str | None = None,
     input_type: str | None = None,
 ) -> PaginatedInvestigations:
-    query = select(Investigation)
+    # Ownership is the outermost filter: history is always the current user's.
+    query = select(Investigation).where(Investigation.user_id == user_id)
     if search:
         query = query.where(Investigation.title.ilike(f"%{search}%"))
     if risk_level:
@@ -397,8 +412,8 @@ async def list_investigations(
     return PaginatedInvestigations(items=items, total=total, page=page, page_size=page_size)
 
 
-async def delete_investigation(db: AsyncSession, investigation_id: str) -> bool:
-    investigation = await _get_investigation(db, investigation_id)
+async def delete_investigation(db: AsyncSession, investigation_id: str, user_id: str) -> bool:
+    investigation = await _get_investigation(db, investigation_id, user_id)
     if investigation is None:
         return False
     await db.delete(investigation)
