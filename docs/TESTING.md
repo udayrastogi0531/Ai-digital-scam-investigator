@@ -1,8 +1,8 @@
 # Testing — AI Digital Scam Investigator
 
-Five checks gate a change: the backend suite, the detection harness, the end-to-end smoke, and the two
-frontend commands. This page covers what each one is, what it does *not* cover, and how to run the
-opt-in live suites.
+Seven checks gate a change: the backend suite (SQLite), the opt-in PostgreSQL integration suite, the
+detection harness, the end-to-end smoke, the two frontend commands, and the documentation link check.
+This page covers what each one is, what it does *not* cover, and how to run the opt-in suites.
 
 Every command below is run from `backend/` with the venv interpreter
 (`.venv/Scripts/python.exe` on Windows, `.venv/bin/python` elsewhere) or from `frontend/` with npm.
@@ -13,7 +13,7 @@ Every command below is run from `backend/` with the venv interpreter
 
 | # | Section |
 |---|---|
-| 1 | [The five gates](#1-the-five-gates) |
+| 1 | [The gates](#1-the-gates) |
 | 2 | [Suite map](#2-suite-map) |
 | 3 | [Why the offline suites are hermetic](#3-why-the-offline-suites-are-hermetic) |
 | 4 | [What is not covered](#4-what-is-not-covered) |
@@ -23,18 +23,29 @@ Every command below is run from `backend/` with the venv interpreter
 
 ---
 
-## 1. The five gates
+## 1. The gates
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest tests/ -q                     # 198 passed, 11 skipped
-.venv/Scripts/python.exe scripts/evaluate_detection.py           # 64 cases, 0 FP, 0 FN, band 40/40
-.venv/Scripts/python.exe scripts/end_to_end_smoke.py              # 12/12 flows
+.venv/Scripts/python.exe -m pytest tests/ -q                      # 236 passed, 12 skipped
+.venv/Scripts/python.exe scripts/evaluate_detection.py --assert-baseline   # 64 cases, 0 FP, 0 FN, band 40/40
+.venv/Scripts/python.exe scripts/end_to_end_smoke.py               # 12/12 flows
+
+# PostgreSQL — opt-in, needs a server (skipped in the default run above)
+RUN_POSTGRES_TESTS=1 POSTGRES_TEST_DATABASE_URL='postgresql+asyncpg://…' \
+  .venv/Scripts/python.exe -m pytest tests/test_postgres_integration.py -q
 
 cd ../frontend
-npm run typecheck                                                 # tsc --noEmit
-npm run build                                                     # Next production build
+npm run typecheck                                                  # tsc --noEmit
+npm run build                                                      # Next production build
+
+# Documentation links (from the repository root)
+python backend/scripts/check_doc_links.py                          # 0 broken
 ```
+
+CI runs exactly these (see `.github/workflows/ci.yml`), with a PostgreSQL service container for the
+integration suite. Detection assertions live in the harness via `--assert-baseline`, so a scoring
+regression fails the build rather than printing a worse number.
 
 Which gates apply to which change is tabulated in
 [CONTRIBUTING.md §4](CONTRIBUTING.md#4-test-gates-by-change-type).
@@ -46,7 +57,7 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 
 ## 2. Suite map
 
-216 tests are collected; 205 pass offline and 11 skip (the live suites).
+248 tests are collected; 236 pass offline and 12 skip (the opt-in live and PostgreSQL suites).
 
 | File | Tests | Covers |
 |---|---|---|
@@ -56,6 +67,9 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 | `test_calibration.py` | 14 | Risk-band regression cases for representative scams and their benign hard negatives, with exact inputs inline |
 | `test_extraction.py` | 10 | URL structure analysis, entity extraction, suspicious TLD/keyword handling |
 | `test_api_integration.py` | 9 | Health, text/URL/image submissions, history filters, detail and delete roundtrip, empty-submission rejection |
+| `test_auth.py` | 21 | Registration and login, bcrypt hashing (plaintext never stored or returned), password policy, duplicate email, identical failures for unknown-email vs wrong-password, `/me`, malformed/foreignly-signed/expired tokens, `token_version` invalidation, logout, and which endpoints require a token |
+| `test_authorization_isolation.py` | 6 | Two real accounts: neither can read, delete or enumerate the other's investigations; a foreign id is byte-identical to a missing one (`404`); history is scoped to the caller; anonymous access is `401` |
+| `test_load.py` | 5 | Deterministic concurrency behaviour: five concurrent text investigations all complete; an image burst beyond `MAX_CONCURRENT_IMAGE_OPS` is refused with `503` + `Retry-After` rather than queued; no slot leak after repeated successes or after failures; the rate limiter still rejects the overflow |
 | `test_upload_security.py` | 14 | Every upload-rejection branch: empty, oversized, non-image bytes behind an image content type, the 64 M-pixel cap (asserting the decode is never reached), Pillow's bomb error *and* bomb warning, a decode-time `MemoryError`, filename sanitisation, no investigation created on rejection, and no file written to disk for a valid upload |
 | `test_image_concurrency.py` | 5 | The bounded image-concurrency gate: the configured limit is respected, an in-flight investigation causes the next image request to get a retryable `503`, capacity is restored once it finishes, and the slot is released after an exception and after a rejected upload |
 | `test_ssrf_guard.py` | 2 | The no-SSRF property, behaviourally: every outbound request during a submission containing internal addresses is captured, and only the configured reputation hosts may appear |
@@ -64,13 +78,17 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 | `test_ml_and_graph.py` | 4 | ML prediction shape and graph state wiring |
 | `test_ocr_live.py` | 7 | **Opt-in.** Real Tesseract contracts (skipped offline) |
 | `test_threat_intel_live.py` | 4 | **Opt-in.** Real Safe Browsing / VirusTotal / LLM contracts (skipped offline) |
+| `test_postgres_integration.py` | 1 | **Opt-in.** Runs `alembic upgrade head` against a real PostgreSQL server, then the full flow (register → investigate → history → cross-user isolation → delete). Skipped unless `RUN_POSTGRES_TESTS=1` |
 
 Two supporting scripts are not pytest suites but are part of the gate:
 
 | Script | What it asserts |
 |---|---|
 | `scripts/evaluate_detection.py` | Binary metrics, per-input-type metrics, category accuracy, band compliance and confidence honesty across the whole corpus; writes `evaluation_report.json` / `.md` |
-| `scripts/end_to_end_smoke.py` | 12 flows against the running application: the eleven demo cases, a custom submission, detail retrieval, history, a risk filter and delete |
+| `scripts/end_to_end_smoke.py` | 12 flows against the running application: the eleven demo cases, a custom submission, detail retrieval, history, a risk filter and delete. Exits non-zero on any failure |
+| `scripts/load_test.py` | **Measurement, not assertion.** Prints observed duration / ok / 503 / failure counts for concurrent text and image submissions. Its numbers are a single-machine baseline, never a capacity claim |
+| `scripts/postgres_integration.py` | The PostgreSQL end-to-end check used by the opt-in test suite and CI; runnable directly with `DATABASE_URL` set |
+| `scripts/check_doc_links.py` | Every relative Markdown link and in-page anchor resolves |
 
 The distinction matters: `test_evaluation_corpus.py` pins **bands** and categories per case, while
 `evaluate_detection.py` reports **aggregate metrics**. A corpus failure is a broken regression; the
@@ -88,6 +106,7 @@ guarantees that, and it is worth knowing before you debug a surprising pass or f
 | `DATABASE_URL` → a fresh temp SQLite file | Tests never touch `backend/data/app.db`, and never write into your history |
 | `OCR_PROVIDER=mock` | No dependency on a system Tesseract for the default run |
 | `RATE_LIMIT_PER_MINUTE=1000` | The limiter cannot fail an unrelated test |
+| `AUTH_SECRET_KEY` → a fixed test value | Tokens minted in one test verify in another, without depending on a local secret |
 | `LLM_PROVIDER=mock` and **blanked** `LLM_API_KEY`, `GOOGLE_SAFE_BROWSING_API_KEY`, `VIRUSTOTAL_API_KEY` | Environment variables outrank the `.env` file, so providers are pinned to their deterministic mocks even if you have live keys configured |
 | `ML_MODEL_PATH` → the shipped artifact | The ML channel behaves as it does in production |
 
@@ -106,8 +125,8 @@ Stated plainly, because an undocumented gap is indistinguishable from an oversig
 |---|---|
 | **No frontend component or browser tests** | `typecheck` and `build` are the enforced frontend gates. Nothing asserts rendering, routing or interaction behaviour |
 | **No adversarial / evasion suite** | No attacker is adapting to these rules, so character substitution, image-only payloads and non-English social engineering are untested |
-| **No latency, throughput or memory tests** | Request latency is dominated by live provider calls and is not characterised |
-| **No load, throughput or memory testing** | The image-concurrency cap has behavioural tests but no stress test, no *measured* memory ceiling and no multi-worker characterisation; the rate limiter is in-process and SQLite is single-writer, and neither is stress-tested |
+| **Load behaviour is tested, capacity is not** | `tests/test_load.py` pins deterministic concurrency behaviour and `scripts/load_test.py` records a single-machine baseline, but there is **no sustained-load, latency-distribution or memory-ceiling characterisation**, and no multi-worker measurement. Do not read the load script as a production capacity figure |
+| **PostgreSQL is opt-in and unverified here** | The integration suite exists but was not run in this repository's environment (no server). CI runs it against a service container |
 | **No dependency or licence audit** | Versions are pinned; nothing scans them for advisories |
 
 ---
@@ -123,11 +142,16 @@ figure, because live reputation services return whatever they return on the day.
 | `test_threat_intel_live.py` | `RUN_LIVE_INTEL_TESTS=1` | `GOOGLE_SAFE_BROWSING_API_KEY` and/or `VIRUSTOTAL_API_KEY` |
 | `test_threat_intel_live.py` (LLM test) | `RUN_LIVE_LLM_TESTS=1` | `LLM_PROVIDER=openai_compatible` + a non-empty `LLM_API_KEY` |
 | `test_ocr_live.py` | `RUN_LIVE_OCR_TESTS=1` | A `tesseract` binary on `PATH` |
+| `test_postgres_integration.py` | `RUN_POSTGRES_TESTS=1` | `POSTGRES_TEST_DATABASE_URL` pointing at a throwaway PostgreSQL database |
 
 ```bash
 cd backend
 RUN_LIVE_INTEL_TESTS=1 RUN_LIVE_LLM_TESTS=1 .venv/Scripts/python.exe -m pytest tests/test_threat_intel_live.py -q
 RUN_LIVE_OCR_TESTS=1 .venv/Scripts/python.exe -m pytest tests/test_ocr_live.py -q
+
+# PostgreSQL (a dedicated, disposable database — the check runs migrations on it)
+RUN_POSTGRES_TESTS=1 POSTGRES_TEST_DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/scaminv_test' \
+  .venv/Scripts/python.exe -m pytest tests/test_postgres_integration.py -q
 ```
 
 Skipped tests are the expected outcome when the switches are unset — that is why the default run reports
@@ -140,7 +164,10 @@ Skipped tests are the expected outcome when the switches are unset — that is w
 Conventions this repository follows:
 
 - Use the `client` fixture (`fastapi.TestClient`) for anything that should exercise the real pipeline
-  through HTTP — that is what the corpus suite does, and it is why its assertions are trustworthy.
+  through HTTP — that is what the corpus suite does, and it is why its assertions are trustworthy. It is
+  **authenticated by default** as `default@example.com`, so existing calls read unchanged; use
+  `anon_client` for a `401`/public-endpoint test and `second_client` for a second account when testing
+  isolation.
 - Prefer **band** assertions over exact-score assertions. Scores are calibration-sensitive; bands are the
   contract. Exact-score assertions make a suite brittle without making it stronger.
 - Test the honesty paths, not just the happy path: a provider failure must be *no information*, a mock

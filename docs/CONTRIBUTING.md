@@ -5,9 +5,10 @@ and honest pushback on design decisions.
 
 This document is the long form. The README carries the short version.
 
-**Out of scope for now:** authentication, multi-tenancy, and anything that turns this single-tenant
-local tool into a hosted service. Those are architectural changes, not patches — open an issue to
-discuss the direction first.
+**Already in place:** secure authentication (bcrypt + JWT), per-user investigation isolation, Alembic
+migrations and CI. **Out of scope for now:** team/organisation features (roles, sharing, an admin
+surface), password reset/MFA, and anything that turns this self-hosted tool into a hosted SaaS. Those
+are architectural changes, not patches — open an issue to discuss the direction first.
 
 ---
 
@@ -281,7 +282,7 @@ Documentation is part of the change, not a follow-up:
 | Change | Why |
 |---|---|
 | Fabricated screenshots or screenshots of a mock UI presented as live | The README deliberately ships a placeholder until real captures exist |
-| A CI or coverage badge with no workflow behind it | No `.github/` workflows exist; a badge would be a false claim |
+| A CI or coverage badge before the workflow has actually run green on GitHub | The workflow file exists but has not been observed passing; a badge would overstate it |
 | "100% accurate" / "detects all scams" wording, or calibration results framed as real-world accuracy | The corpus is 64 fictional cases; the ML metrics are SMS-scoped |
 | Removing or softening an honesty caveat (mock labelling, `demo_mode`, failure semantics, LOW-means-insufficient wording) | Those caveats are features |
 | Hardcoding a key, endpoint secret or user credential | Also a security incident |

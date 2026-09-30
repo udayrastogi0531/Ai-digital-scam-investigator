@@ -104,8 +104,10 @@ Every document in this repository, and the question it answers:
 | Threat intelligence | Google Safe Browsing · VirusTotal (header-authenticated, failure-safe) |
 | OCR | System **Tesseract** via subprocess (labelled mock fallback) |
 | LLM | OpenAI-compatible provider (Gemini verified) for **explanation only** |
-| Database | SQLite local (verified) · PostgreSQL 16 code path + compose config (not verified locally) |
-| Packaging | `docker-compose.yml` + Dockerfiles included (not executed in this environment) |
+| Database | SQLite local (verified) · PostgreSQL 16 via Alembic migrations + opt-in integration suite (configured; **not verified here** — no server installed) |
+| Authentication | JWT bearer tokens (`PyJWT`, HS256) · bcrypt password hashing · per-user investigation isolation |
+| Packaging | `docker-compose.yml` + Dockerfiles included (not executed in this environment — no Docker CLI) |
+| CI | GitHub Actions: backend (SQLite + a PostgreSQL service container), frontend, security & docs link check |
 
 ---
 
@@ -587,6 +589,11 @@ The Next dev server proxies `/api/*` to `http://localhost:8000` (`BACKEND_URL` o
 so the browser only ever talks to the frontend origin. **No keys are required** — the default is fully
 offline demo mode.
 
+**Create an account first.** Every investigation endpoint requires a bearer token, so the app opens on
+`/login`: choose **Create one**, register with an email and a password of at least 8 characters, and
+you land on the dashboard. Investigations are private to the account that created them. Provider keys
+stay optional — registering is the only setup step.
+
 To enable providers, copy `backend/.env.example` to `backend/.env` and fill in only what you have.
 Leave `DATABASE_URL` unset so the verified local SQLite store is used: the repository's root
 `.env.example` is the **docker-compose template**, and it points `DATABASE_URL` at the containerised
@@ -612,6 +619,10 @@ repository root (docker-compose). `backend/.env` is git-ignored and must never b
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | SQLite local file | `postgresql+asyncpg://…` for the PostgreSQL path |
+| `POSTGRES_PASSWORD` | `scaminv` (compose) | Password for the bundled postgres service — change it for anything shared |
+| `AUTH_SECRET_KEY` | insecure dev key | **Required for real deployments** — signs access tokens |
+| `AUTH_TOKEN_EXPIRE_MINUTES` | `1440` | Access-token lifetime (24 h) |
+| `AUTH_PASSWORD_MIN_LENGTH` | `8` | Minimum password length |
 | `LLM_PROVIDER` | `mock` | `mock` \| `openai_compatible` |
 | `LLM_API_KEY` | — | Live LLM credential (server-side only) |
 | `LLM_BASE_URL` | — | Any OpenAI-compatible `/v1` base |
@@ -627,6 +638,7 @@ repository root (docker-compose). `backend/.env` is git-ignored and must never b
 | `MAX_TEXT_LENGTH` | `50000` | Text input cap (characters) |
 | `MAX_URLS_PER_SUBMISSION` | `20` | URL count cap |
 | `RATE_LIMIT_PER_MINUTE` | `30` | Per-IP limit on investigation creation |
+| `MAX_CONCURRENT_IMAGE_OPS` | `4` | Per-process cap on concurrent image/OCR investigations (503 beyond it) |
 | `CORS_ORIGINS` | `http://localhost:3000` | Allowed browser origins (unnecessary when the proxy is used) |
 | `ML_MODEL_PATH` | bundled `.joblib` | Classifier artifact path |
 | `ML_DECISION_THRESHOLD` | `0.55` | Model label threshold (validated on the UCI validation split) |
@@ -642,18 +654,25 @@ repository root (docker-compose). `backend/.env` is git-ignored and must never b
 All routes are mounted under `/api` (interactive docs at `/docs` while the server runs). Full request
 and response reference, including error semantics and a worked walkthrough: **[docs/API.md](docs/API.md)**.
 
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/health` | Status + provider/mode summary (LLM, threat intel, ML, OCR, database) |
-| `POST` | `/api/investigations` | Create an investigation — multipart: `text`, `urls[]`, `title`, `source_label`, `image` (rate-limited) |
-| `GET` | `/api/investigations` | List investigations — paginated and filterable (`search`, `risk_level`, `scam_type`) |
-| `GET` | `/api/investigations/{id}` | Full investigation view — risk, evidence, entities, report, timeline |
-| `DELETE` | `/api/investigations/{id}` | Delete an investigation (`204`) |
-| `POST` | `/api/analyze/text` | Text-only analysis |
-| `POST` | `/api/analyze/url` | URL-only analysis |
-| `POST` | `/api/analyze/image` | Screenshot analysis (OCR → pipeline) |
-| `GET` | `/api/demo` | List the built-in demo cases |
-| `POST` | `/api/demo/{slug}` | Run a deterministic demo case end-to-end |
+Everything except `GET /api/health`, `POST /api/auth/register`, `POST /api/auth/login` and
+`GET /api/demo` requires `Authorization: Bearer <token>`; a missing or invalid token returns `401`.
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/api/health` | Public | Status + provider/mode summary (LLM, threat intel, ML, OCR, database) |
+| `POST` | `/api/auth/register` | Public | Create an account; returns an access token |
+| `POST` | `/api/auth/login` | Public | Exchange email + password for an access token |
+| `GET` | `/api/auth/me` | Bearer | The authenticated account |
+| `POST` | `/api/auth/logout` | Bearer | Acknowledge logout (client discards its token) |
+| `POST` | `/api/investigations` | Bearer | Create an investigation — multipart: `text`, `urls[]`, `title`, `source_label`, `image` (rate-limited) |
+| `GET` | `/api/investigations` | Bearer | List **your** investigations — paginated and filterable (`search`, `risk_level`, `scam_type`) |
+| `GET` | `/api/investigations/{id}` | Bearer | Full view of **your** investigation (`404` for anyone else's) |
+| `DELETE` | `/api/investigations/{id}` | Bearer | Delete your investigation (`204`) |
+| `POST` | `/api/analyze/text` | Bearer | Text-only analysis |
+| `POST` | `/api/analyze/url` | Bearer | URL-only analysis |
+| `POST` | `/api/analyze/image` | Bearer | Screenshot analysis (OCR → pipeline) |
+| `GET` | `/api/demo` | Public | List the built-in demo cases |
+| `POST` | `/api/demo/{slug}` | Bearer | Run a demo case end-to-end (owned by the caller) |
 
 ---
 
@@ -661,9 +680,15 @@ and response reference, including error semantics and a worked walkthrough: **[d
 
 | Suite | Command (from `backend/`) | Verified result |
 |---|---|---|
-| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **198 passed**, 11 skipped |
+| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **236 passed**, 12 skipped |
 | Detection calibration | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64 cases · F1 1.0 · 0 FP · 0 FN · band 40/40 · 0 errors |
 | End-to-end smoke | `.venv/Scripts/python.exe scripts/end_to_end_smoke.py` | **12/12** flows |
+| Authentication | `.venv/Scripts/python.exe -m pytest tests/test_auth.py -q` | 21 passed |
+| Authorization / isolation | `.venv/Scripts/python.exe -m pytest tests/test_authorization_isolation.py -q` | 6 passed |
+| Load / concurrency behaviour | `.venv/Scripts/python.exe -m pytest tests/test_load.py -q` | 5 passed |
+| Controlled load measurement | `.venv/Scripts/python.exe scripts/load_test.py` | image limit 2 → 2 ok / 4 refused (503), 0 failures |
+| PostgreSQL integration (opt-in) | `RUN_POSTGRES_TESTS=1 POSTGRES_TEST_DATABASE_URL=… … -m pytest tests/test_postgres_integration.py -q` | **not run here** (no server) — skipped by default |
+| Documentation links | `python backend/scripts/check_doc_links.py` | 0 broken |
 | ML training + held-out report | `.venv/Scripts/python.exe scripts/ml_training/train.py --dataset data/datasets/real/sms_spam_uci.csv --no-categories` | metrics in [Evaluation](#evaluation) |
 | ML full-corpus sanity | `.venv/Scripts/python.exe scripts/ml_training/evaluate.py --dataset data/datasets/real/sms_spam_uci.csv` | accuracy 0.9353 · F1 0.7687 · ROC-AUC 0.9741 |
 | Frontend typecheck (`from frontend/`) | `npm run typecheck` | PASS |
@@ -704,13 +729,19 @@ non-goals live in **[docs/SECURITY.md](docs/SECURITY.md)**. Summary of what is e
 | **Input limits** | `MAX_TEXT_LENGTH` (50,000 characters) and `MAX_URLS_PER_SUBMISSION` (20) |
 | **Bounded image concurrency** | `MAX_CONCURRENT_IMAGE_OPS` (default 4) caps how many image investigations are decoded and OCR'd at once; a request beyond the cap is refused with a retryable `503` instead of piling up pixel memory, and the slot is always released. The limit is **per process** (a multi-worker deployment multiplies it by the worker count) — a safety valve, not a DDoS control. Covered by `tests/test_image_concurrency.py` |
 | **Rate limiting** | Per-IP sliding-window limit on `POST /api/investigations` (`RATE_LIMIT_PER_MINUTE`, default 30), `x-forwarded-for`-aware — behaviour covered by `tests/test_rate_limit.py` |
+| **Authentication** | Email + password registration/login. Passwords are bcrypt-hashed and never stored, returned or logged; access tokens are signed JWTs (`HS256`) with an expiry, signed with `AUTH_SECRET_KEY` from the environment only. Covered by `tests/test_auth.py` |
+| **Authorization / multi-tenancy** | Every investigation carries a `user_id`; list, detail and delete are filtered by the current user **in the query**, so another account gets the same `404` a missing id would (no existence leak). Covered by `tests/test_authorization_isolation.py` |
+| **Brute-force resistance** | Registration and login are rate-limited per IP, and a login failure is identical for an unknown email and a wrong password (no user enumeration) |
+| **Token revocation** | Tokens are stateless; `User.token_version` invalidates every outstanding token (e.g. after a password change), and logout discards the client copy |
 | **Provider fail-safety** | Outages, timeouts, rate limits and unusable inputs are *no information* — never a clean verdict, and never a reason to lower risk |
 | **Logging hygiene** | Structured JSON logs deliberately exclude raw message bodies; HTTP-client request logging is silenced where credentials could appear in a URL |
 | **No dynamic execution** | No `eval`, `exec` or shell interpolation of user content anywhere in the codebase |
 | **Secret containment** | `.env` is git-ignored (all variants); `.env.example` ships placeholders only |
 
-No "100% secure" claim is made: this is a local, single-tenant, self-hosted application without
-authentication or multi-user isolation — see [Limitations](#limitations) and the full non-goal list in
+No "100% secure" claim is made. Authentication and per-user isolation now exist, but this is still a
+self-hosted application rather than a hardened multi-tenant SaaS: the rate limiter and image cap are
+per process, tokens travel in `localStorage` (XSS-sensitive), and there is no email verification,
+password reset, MFA or admin role. See [Limitations](#limitations) and the full non-goal list in
 [docs/SECURITY.md](docs/SECURITY.md#6-known-limitations-and-non-goals).
 
 ---
@@ -757,15 +788,20 @@ layer (engine-portable filters are implemented for both).
 
 | Table | Contents |
 |---|---|
-| `investigations` | Metadata, status, input types, timestamps |
+| `users` | Account: email (unique), bcrypt `password_hash`, display name, `token_version` |
+| `investigations` | Owner (`user_id`, indexed), metadata, status, input types, timestamps |
 | `evidence` | Structured signals (source, signal, severity, confidence, description, detail) |
 | `extracted_entities` | Typed entities with context and metadata |
 | `analysis_results` | Per-branch structured output |
 | `risk_assessments` | Score, band, confidence, method, weights, sufficiency, contributors |
 | `reports` | Summary, objective, indicators, recommended actions, sections |
 
-Schema creation happens on startup (`create_tables()` in the FastAPI lifespan) and is idempotent for
-a fresh database; there is no migration framework in this repository.
+Schema is managed by **Alembic** (`backend/alembic/`); the initial migration creates every table above.
+`alembic upgrade head` is the single documented initialization path and the container entrypoint runs
+it on start. `create_tables()` in the FastAPI lifespan still runs `Base.metadata.create_all` as a
+zero-setup convenience for local SQLite and tests; it only adds missing tables and is a no-op after a
+migration. Ownership is a column on `investigations`; a row with a null `user_id` predates
+authentication and is invisible to every account rather than exposed anonymously.
 
 ---
 
@@ -778,8 +814,8 @@ AI-digital-scam-investigator/
 │   │   ├── agents/         LangGraph nodes (parse, OCR, analyze, URL, entity, intel, ML,
 │   │   │                   correlate, classify, risk, explain, report)
 │   │   ├── analysis/       Linguistic text-signal rules
-│   │   ├── api/routes/     health · investigations · analyze · demo
-│   │   ├── core/           Config, logging, rate limiting, image concurrency, upload security
+│   │   ├── api/routes/     health · auth · investigations · analyze · demo
+│   │   ├── core/           Config, logging, auth (bcrypt + JWT), rate limiting, image concurrency, upload security
 │   │   ├── extraction/     URL analysis, entity extractor, OCR adapter, text extractor
 │   │   ├── graph/          Typed InvestigationState + workflow builder
 │   │   ├── intelligence/   Provider interface, Safe Browsing, VirusTotal, demo, manager
@@ -789,16 +825,19 @@ AI-digital-scam-investigator/
 │   │   ├── risk/           Deterministic weighted engine + evidence correlation
 │   │   ├── schemas/        Pydantic API contracts
 │   │   └── services/       Investigation orchestration + demo cases
+│   ├── alembic/            Migration environment + versions (initial schema)
 │   ├── data/
 │   │   ├── datasets/       Real UCI SMS corpus + synthetic set + provenance + training report
 │   │   └── evaluation/     evaluation_cases.json — the 64-case calibration corpus
-│   ├── scripts/            evaluate_detection.py · end_to_end_smoke.py · ml_training/
-│   ├── tests/              Hermetic pytest suites + opt-in live OCR / intel / LLM suites
+│   ├── scripts/            evaluate_detection.py · end_to_end_smoke.py · load_test.py
+│   │                       postgres_integration.py · check_doc_links.py · ml_training/
+│   ├── tests/              Hermetic pytest suites (auth, isolation, load) + opt-in live / PostgreSQL suites
 │   └── .env.example        Local env template (SQLite-first; shows every optional key)
 ├── frontend/
-│   ├── app/                / · /dashboard · /investigate · /history · /results/[id]
-│   ├── components/         Shell, landing, investigation views, UI primitives
-│   └── lib/                API client + shared types
+│   ├── app/                / · /login · /register · /dashboard · /investigate · /history · /results/[id]
+│   ├── components/         Shell, auth guard, landing, investigation views, UI primitives
+│   └── lib/                API client (bearer auth) + token storage + shared types
+├── .github/workflows/      CI: backend (+ PostgreSQL service) · frontend · security · docs
 ├── docs/                   ARCHITECTURE · EVALUATION · API · SECURITY · DEPLOYMENT · PROVIDERS
 │                           TESTING · TROUBLESHOOTING · FAQ · GLOSSARY · CONTRIBUTING · CHANGELOG · ROADMAP
 ├── docker-compose.yml      postgres + backend + frontend (configuration; unverified here)
@@ -825,15 +864,25 @@ Honest, current constraints:
   over the participating channels by design, so sparse single-signal cases report
   `PARTIAL`/`INSUFFICIENT` evidence rather than escalating.
 - **Detection is English-centric.**
-- **PostgreSQL was not executed here** (not installed); the code path and compose configuration are
-  present and engine-portable, but unverified locally.
-- **Docker was not executed here** (no Docker CLI); the Dockerfiles and compose file are unchanged
-  and untested in this environment.
+- **PostgreSQL was not executed here** (no server installed); the Alembic migration, the async engine
+  path and an opt-in integration suite (`tests/test_postgres_integration.py`, `RUN_POSTGRES_TESTS=1`)
+  are in place, but the PostgreSQL result is reported as **unverified**, not as passing.
+- **Docker was not executed here** (no Docker CLI); the Dockerfiles and compose file are prepared and
+  unverified in this environment.
 - **No cloud deployment exists** — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the intended,
   partly unverified paths.
-- **No authentication or multi-tenancy**: history is a single shared store, the rate limiter and the
-  image-concurrency cap are both in-process and per worker (a Redis-backed limiter is the production
-  upgrade path), and there is no measured capacity figure.
+- **The rate limiter and the image-concurrency cap remain per process**, by design. A multi-worker
+  deployment multiplies each by the worker count (`workers × MAX_CONCURRENT_IMAGE_OPS`). A shared
+  (PostgreSQL- or Redis-backed) limiter was evaluated and deliberately not added — see
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Load figures are a baseline, not a capacity claim.** The controlled in-process measurement
+  (`scripts/load_test.py`) records behaviour on one machine with mock providers; it is not a
+  production throughput number.
+- **Authentication is intentionally minimal:** no email verification, password reset, MFA, roles or
+  admin surface. Tokens are kept in `localStorage`, which is XSS-sensitive, and logout is client-side
+  (server-side invalidation is available via `token_version`).
+- **Legacy rows are unowned.** Investigations created before authentication existed have a null
+  `user_id` and are invisible to every account — never exposed anonymously.
 - The system is **decision support** — it produces probabilistic, evidence-based assessments and
   never guarantees.
 
@@ -853,14 +902,18 @@ Completed:
 - [x] Grounded LLM explanation and report with deterministic fallback
 - [x] 64-case calibration corpus plus hermetic pytest suites
 - [x] Next.js product surface (landing, dashboard, investigate, results, history)
+- [x] Alembic migrations + a PostgreSQL integration path
+- [x] Secure authentication (bcrypt + JWT) and per-user investigation isolation
+- [x] GitHub Actions CI (backend + PostgreSQL service, frontend, security & docs)
+- [x] Controlled concurrency/load test suite and a reproducible measurement script
 
 Future work (not started):
 
 - [ ] Broaden training data beyond SMS to phishing/URL-heavy labelled corpora
 - [ ] Grow the evaluation corpus with real-world-sourced, provenance-tracked cases
-- [ ] PostgreSQL production validation and migration tooling
-- [ ] CI pipeline covering backend tests, evaluation, E2E, typecheck and build
-- [ ] Authentication and multi-user deployment
+- [ ] Validate the PostgreSQL deployment against a real server (currently unverified)
+- [ ] Password reset, email verification and optional MFA
+- [ ] A shared (PostgreSQL- or Redis-backed) limiter if a multi-worker deployment needs one
 - [ ] Additional threat-intelligence providers
 - [ ] Richer analyst workflow (notes, case assignment, exports)
 - [ ] Parallel provider fan-out tuning to cut live-query latency

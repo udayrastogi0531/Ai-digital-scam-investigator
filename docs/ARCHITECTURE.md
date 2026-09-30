@@ -122,6 +122,10 @@ why changing rule matching requires retraining the shipped classifier (see [§8]
 
 `POST /api/investigations` (multipart: `text`, `urls[]`, `title`, `source_label`, `image`):
 
+0. **Authentication** — `core/auth.py::get_current_user` validates the `Authorization: Bearer` token
+   (signature, expiry, and `ver` against the account's `token_version`) and loads the `User`. A missing
+   or invalid token is a `401` before any work happens. Every investigation row is written with the
+   caller's `user_id`, and every read path is scoped to it.
 1. **Rate limit and image gate** — `core/rate_limit.py` applies a per-IP sliding window
    (`RATE_LIMIT_PER_MINUTE`, default 30) before any work happens. A submission that carries a
    screenshot is *also* admitted through the in-process image-concurrency gate
@@ -458,13 +462,18 @@ provider-specific code.
 
 ## 12. Persistence
 
-Async SQLAlchemy 2 (`database.py`). The engine is created once from `DATABASE_URL`;
-`create_tables()` runs in the FastAPI lifespan and is idempotent. There is **no migration
-framework** — schema changes are applied by `create_all` on a fresh database.
+Async SQLAlchemy 2 (`database.py`). The engine is created once from `DATABASE_URL`.
+
+Schema is managed by **Alembic** (`backend/alembic/`). `alembic upgrade head` is the single documented
+initialization path, run by the container entrypoint on start and by the PostgreSQL integration check
+in CI; the migration is idempotent. `create_tables()` still runs `Base.metadata.create_all` in the
+FastAPI lifespan as a zero-setup convenience for local SQLite and tests — it only adds missing tables
+and becomes a no-op after a migration.
 
 | Table | Contents |
 |---|---|
-| `investigations` | Submission metadata, input types, status, timestamps |
+| `users` | Account: unique email, bcrypt `password_hash`, display name, `token_version` |
+| `investigations` | Owner (`user_id`, indexed, nullable for pre-auth rows), submission metadata, input types, status, timestamps |
 | `evidence` | One row per `EvidenceSignal` (source, signal, severity, confidence, description, detail) |
 | `extracted_entities` | URLs, emails, phones, amounts, dates, companies, banks, organizations |
 | `analysis_results` | One row per timeline stage — this is what the UI timeline and the API view are rebuilt from |
@@ -473,8 +482,15 @@ framework** — schema changes are applied by `create_all` on a fresh database.
 
 Reads rebuild the API response from stored rows rather than from memory, so a result page renders
 identically after a restart. Filters are written to be portable across SQLite and PostgreSQL
-(`json_extract` vs `->>` / `.astext`). SQLite is single-writer and is the verified local path;
-PostgreSQL 16 via `postgresql+asyncpg://` is the compose/cloud path and requires `asyncpg`.
+(`json_extract` vs `->>` / `.astext`); the dialect switch is chosen from `DATABASE_URL`, not from a
+hardcoded assumption. SQLite is single-writer and is the verified local path; PostgreSQL 16 via
+`postgresql+asyncpg://` is the deployment path and requires `asyncpg`.
+
+**Ownership.** `investigations.user_id` is the multi-tenancy boundary. List, detail and delete all
+filter on it **inside the query** (`WHERE user_id = :me`), so a foreign id returns `None` — the same
+`404` as a missing row — rather than being fetched and then rejected. A nullable column lets a
+database created before authentication migrate without a backfill; such legacy rows are invisible to
+every account and are never returned anonymously.
 
 ---
 
@@ -485,7 +501,10 @@ PostgreSQL 16 via `postgresql+asyncpg://` is the compose/cloud path and requires
 | **No SSRF.** | The server never fetches a user-supplied URL. URLs are parsed structurally and sent to reputation providers as *values*; there is no `requests.get(user_input)` path anywhere. |
 | **Upload safety.** | `core/security.py::read_image_upload` caps bytes at `MAX_UPLOAD_MB + 1`, rejects empty files, ignores the declared content type and requires Pillow to decode the bytes. Dimensions are read from the header and compared against a 64 M-pixel cap **before** `load()` allocates the pixel buffer, so an oversized image is rejected without being decompressed; Pillow's `DecompressionBombError` / `DecompressionBombWarning` and a decode-time `MemoryError` are converted to the same `400`. The decode runs in a worker thread, and the whole image submission is admitted through the bounded concurrency gate (below) so its pixel buffer cannot be multiplied without limit. Nothing is written to disk; the bytes are used in memory and discarded. |
 | **Input limits.** | `MAX_TEXT_LENGTH` (50,000) and `MAX_URLS_PER_SUBMISSION` (20) are enforced by the `InputPayload` contract before any analysis runs. |
-| **Rate limiting.** | `core/rate_limit.py` applies a per-IP sliding window (`RATE_LIMIT_PER_MINUTE`, default 30) ahead of the work. |
+| **Rate limiting.** | `core/rate_limit.py` applies a per-IP sliding window (`RATE_LIMIT_PER_MINUTE`, default 30) ahead of the work, including on register/login (brute-force resistance). |
+| **Authentication.** | `core/auth.py` hashes passwords with **bcrypt** and never stores, returns or logs the plaintext; tokens are signed JWTs (`HS256`) with an expiry, signed only with the environment-supplied `AUTH_SECRET_KEY`. A token is rejected unless its signature, expiry and `ver` claim all check out. The OpenAPI security scheme is `HTTPBearer`, so `/docs` reflects the requirement. |
+| **Authorization / multi-tenancy.** | Ownership is a column filtered in the query, not a post-hoc check: list returns only the caller's rows, and detail/delete of another account's id returns `404` rather than `403`, so a caller cannot learn whether an id exists. Covered by `tests/test_authorization_isolation.py`. |
+| **Token handling in the browser.** | The token is held in `localStorage` and sent as a bearer header; no token or key is ever placed in a `NEXT_PUBLIC_*` variable. `localStorage` is readable by any script on the origin, so XSS is a real residual risk (there is no third-party script in the app today) — recorded rather than hidden. |
 | **Bounded image concurrency.** | `core/concurrency.py` admits at most `MAX_CONCURRENT_IMAGE_OPS` (default 4) image investigations at once and returns `503` otherwise; the slot is released in a `finally`. The counter is **per process**, so a multi-worker deployment multiplies the effective ceiling by the worker count — a memory safety valve, not a global or DDoS limit ([SECURITY.md](SECURITY.md) §2). |
 | **Keys stay server-side.** | Provider keys are read from the backend environment only. The frontend has no `NEXT_PUBLIC_*` variable and never receives a key; the browser only talks to the Next.js origin. |
 | **Header auth.** | Both threat-intel providers authenticate by header because request URLs leak into client/proxy logs. |
@@ -539,12 +558,15 @@ for the UI and no backend URL or key is exposed to client code.
 
 | Concern | Where it lives |
 |---|---|
-| API client | `frontend/lib/` — typed calls to the `/api` paths |
-| Pages | `/` (landing), `/investigate`, `/dashboard`, `/history`, `/results/[id]` |
+| API client | `frontend/lib/api.ts` — typed calls to the `/api` paths; attaches the bearer token and, on a `401`, clears the session and routes to `/login` |
+| Session storage | `frontend/lib/auth.ts` — token + user in `localStorage` |
+| Route guard | `frontend/components/auth-guard.tsx` wraps the `(app)` group; the backend remains the real authority |
+| Pages | `/` (landing), `/login`, `/register`, `/investigate`, `/dashboard`, `/history`, `/results/[id]` |
 | Result rendering | The result page renders the risk gauge, evidence groups and timeline; the "Why this score?" panel is driven by the `RiskContributor` rows, and mock/demo state is shown explicitly rather than hidden |
 | Styling | Tailwind CSS; `lucide-react` for icons |
 
-The API surface consumed by the UI: `GET /api/health`, `POST /api/investigations`,
+The API surface consumed by the UI: `POST /api/auth/register`, `POST /api/auth/login`,
+`GET /api/auth/me`, `POST /api/auth/logout`, `GET /api/health`, `POST /api/investigations`,
 `GET /api/investigations`, `GET /api/investigations/{id}`, `DELETE /api/investigations/{id}`,
 `POST /api/analyze`, and the demo routes under `/api/demo`.
 
@@ -560,13 +582,15 @@ Three services, two supported database paths, one honest caveat per path.
 | Backend | `uvicorn app.main:app` (port 8000) | `backend/Dockerfile` (`python:3.13-slim` + `tesseract-ocr`) |
 | Frontend | `next dev -p 3000` / `next start` | Node host with `BACKEND_URL` pointing at the backend |
 | Orchestration | Two terminals | `docker-compose.yml` (postgres + backend + frontend) |
-| Schema | `create_tables()` in the lifespan | Same; no migration tool |
+| Schema | Alembic migrations (`alembic upgrade head`) | Same — the container entrypoint runs the migrations before starting the API |
+| Auth | JWT bearer tokens, `AUTH_SECRET_KEY` from the environment | Same; `AUTH_SECRET_KEY` **must** be set in `.env` |
 
-**Verification status, stated plainly.** SQLite, the FastAPI app, the LangGraph workflow, the ML
-artifact, the frontend build and the live Safe Browsing / VirusTotal / Gemini / Tesseract integrations
-were executed and verified locally. The **PostgreSQL code path is preserved but was not configured or
-verified** in this environment, and **the Docker path was not exercised** because the Docker CLI was
-not available. Nothing in this document should be read as a claim that a container deployment or a
+**Verification status, stated plainly.** SQLite, the FastAPI app, the LangGraph workflow, the
+authentication and isolation behaviour, the load/concurrency behaviour, the ML artifact, the frontend
+build and the live Safe Browsing / VirusTotal / Gemini / Tesseract integrations were executed and
+verified locally. The **PostgreSQL path has a migration and an opt-in integration suite but was not
+verified here** (no server installed), and **the Docker path was not exercised** (no Docker CLI was
+available). Nothing in this document should be read as a claim that a container deployment or a
 PostgreSQL instance has been run.
 
 Operational consequences worth designing around:
@@ -577,3 +601,39 @@ Operational consequences worth designing around:
   single-writer, so multi-replica deployments require PostgreSQL.
 - The `/api/health` provider block is the fastest way to confirm a deployment is actually wired to the
   keys it claims to have.
+
+---
+
+## 18. Concurrency and rate limiting: why per-process (a decision record)
+
+Both the per-IP rate limiter (`core/rate_limit.py`) and the image-concurrency gate
+(`core/concurrency.py`) are **in-process**. This section records why that is the current answer and
+what would change it — so the choice is deliberate rather than accidental.
+
+**What is actually deployed.** The supported deployment topologies are a single `uvicorn` process
+(local), the compose stack's single backend container, and a single container host. None of these runs
+multiple workers by default, so a per-process limiter *is* a whole-deployment limiter for the shipped
+configuration.
+
+**The cost of the alternative.** A shared limiter needs shared state. PostgreSQL *could* back one
+(with `SELECT … FOR UPDATE` or an advisory lock), but doing a database round-trip on the hot submission
+path to guard against a case that multi-worker deployment does not yet create would add a new
+bottleneck and a new failure mode (the limiter becomes unavailable when the database is slow). Redis
+would solve it cleanly but introduces infrastructure the project does not otherwise need. Neither is
+justified by the current deployment model.
+
+**Documented limitation, stated in the operators' terms.** Under `W` workers the effective ceilings are:
+
+| Control | Effective ceiling |
+|---|---|
+| Image concurrency | `W × MAX_CONCURRENT_IMAGE_OPS` |
+| Per-IP rate limit | `W × RATE_LIMIT_PER_MINUTE` (each worker keeps its own window) |
+
+Both reset on restart, and both are per-host: running the backend on two hosts doubles them again.
+They remain safety valves — a bound on simultaneously-decoded pixel buffers and on submission flood —
+not a global quota and not a DDoS defence.
+
+**Revisit when** the deployment actually runs multiple workers or replicas *and* either control is
+load-bearing. At that point the least-effort correct option is a PostgreSQL-backed fixed-window counter
+(one table, one `INSERT … ON CONFLICT … RETURNING`), because the database is already a required
+dependency; Redis remains the option only if the limiter must survive database unavailability.

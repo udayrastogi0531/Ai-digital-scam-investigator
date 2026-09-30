@@ -78,6 +78,10 @@ stack (where `DATABASE_URL` must point at the `postgres` service name, not `loca
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | Production | `postgresql+asyncpg://USER:PASSWORD@HOST:5432/DB`. Omit locally to use SQLite. |
+| `AUTH_SECRET_KEY` | **Yes** | Signs access tokens. The app warns at startup and uses an insecure development key if unset. Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"`. |
+| `AUTH_TOKEN_EXPIRE_MINUTES` | No | Default `1440` (24 h). |
+| `AUTH_PASSWORD_MIN_LENGTH` | No | Default `8`. |
+| `POSTGRES_PASSWORD` | Compose only | Password for the bundled `postgres` service; change it for anything shared. |
 | `LLM_PROVIDER` | No | `mock` (default) or `openai_compatible`. |
 | `LLM_API_KEY` | For live LLM | Server-side only. |
 | `LLM_BASE_URL` | For live LLM | Any OpenAI-compatible `/v1` base. Gemini: `https://generativelanguage.googleapis.com/v1beta/openai`. |
@@ -89,7 +93,8 @@ stack (where `DATABASE_URL` must point at the `postgres` service name, not `loca
 | `OCR_PROVIDER` | No | `auto` (default) / `tesseract` / `mock`. |
 | `TESSERACT_BINARY` | No | Default `tesseract`; must be on `PATH`. |
 | `MAX_UPLOAD_MB` / `MAX_TEXT_LENGTH` / `MAX_URLS_PER_SUBMISSION` | No | Defaults `10` / `50000` / `20`. |
-| `RATE_LIMIT_PER_MINUTE` | No | Default `30` per IP. |
+| `RATE_LIMIT_PER_MINUTE` | No | Default `30` per IP (applies to submissions *and* register/login). |
+| `MAX_CONCURRENT_IMAGE_OPS` | No | Default `4`; per-process cap on concurrent image/OCR investigations. |
 | `CORS_ORIGINS` | Yes, if the browser calls the API directly | JSON list. Not needed when the frontend proxy is used. |
 | `ML_MODEL_PATH` | No | Defaults to the bundled artifact. |
 | `ML_DECISION_THRESHOLD` | No | Default `0.55`. |
@@ -149,8 +154,10 @@ Steps:
 4. Health check path: `/api/health`.
 5. Ensure the platform terminates TLS in front of the service.
 
-The app creates its schema on startup (`create_tables()` in the FastAPI lifespan). There is no
-migration framework in this repository; schema creation is idempotent for a fresh database.
+Schema is applied by the container entrypoint (`backend/docker-entrypoint.sh` runs
+`alembic upgrade head` before `uvicorn`), so a fresh service self-initializes on first start and
+subsequent starts are no-ops. Running the app outside the image? Apply the same migration manually:
+`cd backend && alembic upgrade head` against the target `DATABASE_URL`.
 
 ---
 
@@ -162,6 +169,32 @@ migration framework in this repository; schema creation is idempotent for a fres
   across both engines (`json_extract` on SQLite vs `->>`/`.astext` on PostgreSQL in
   `backend/app/services/investigation_service.py`).
 - Do not commit database files (`*.db` is git-ignored).
+
+### Initialization and migrations
+
+**One documented path: `alembic upgrade head`.** The migration environment lives in `backend/alembic/`
+and reads `DATABASE_URL` from the same app settings, so migrations and the app can never disagree about
+the target database. The container entrypoint runs it automatically on start.
+
+```bash
+# Fresh PostgreSQL database, before first start (or let the container do it)
+cd backend
+export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/scaminv'
+.venv/Scripts/python.exe -m alembic upgrade head   # Python: alembic upgrade head
+```
+
+The migration creates `users`, `investigations` (with the `user_id` owner column), `evidence`,
+`extracted_entities`, `analysis_results`, `risk_assessments` and `reports`.
+
+- A **database created before authentication existed** already has the investigation tables. Stamp it
+  rather than replaying the migration: `alembic stamp head`. Rows created back then have a null
+  `user_id` and are invisible to every account.
+- Verify the deployment end-to-end, including migrations on PostgreSQL:
+  `RUN_POSTGRES_TESTS=1 POSTGRES_TEST_DATABASE_URL='postgresql+asyncpg://…' python -m pytest tests/test_postgres_integration.py -q`
+  or run the same check directly: `DATABASE_URL='…' python -m scripts.postgres_integration`.
+
+> **Status:** the migration was exercised against SQLite in this repository; the PostgreSQL path is
+> **not verified here** (no server was installed). Treat it as configured-but-unproven until you run it.
 
 ### docker-compose alternative
 
@@ -244,6 +277,8 @@ configured, and `demo_mode: true` means both the LLM and threat intel are runnin
 
 ## 9. Security checklist before going live
 
+- [ ] `AUTH_SECRET_KEY` set to a long random value — **not** the development default.
+- [ ] `POSTGRES_PASSWORD` changed from the compose default.
 - [ ] `DEBUG=false`.
 - [ ] `CORS_ORIGINS` lists explicit origins only.
 - [ ] All provider keys set on the backend service, none on the frontend.
@@ -271,4 +306,10 @@ before exposing this service to any network.
 - Image/OCR concurrency is bounded **per process** (`MAX_CONCURRENT_IMAGE_OPS`, default 4), so the
   effective ceiling across a fleet is the worker count × the limit. Size it against the host's memory:
   a cap-sized upload needs roughly 192 MB of pixel buffer while it is decoding.
+- The per-IP rate limiter is likewise **per process**: `W` workers give an effective
+  `W × RATE_LIMIT_PER_MINUTE`. This is deliberate for the single-worker deployment the project ships;
+  the reasoning and the revisit trigger are in
+  [`ARCHITECTURE.md` §18](ARCHITECTURE.md#18-concurrency-and-rate-limiting-why-per-process-a-decision-record).
 - SQLite is single-writer: use PostgreSQL for any multi-replica deployment.
+- Run `scripts/load_test.py` to reproduce a behaviour baseline on the target host before making a
+  capacity claim — it measures the application, not a production fleet.

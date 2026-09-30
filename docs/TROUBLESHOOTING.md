@@ -59,6 +59,11 @@ it is an environment problem, not a missing key.
 | Every submission reports the same LOW score in demo mode | Expected: mock threat intel returns a fictional blocklist and the LLM is templated | Configure real providers, or accept demo mode — the ML classifier is real even in demo mode |
 | Explanations read as templated even with a key set | The provider failed and the **deterministic fallback** produced the text — by design, so the investigation still completes | Look for `LLM HTTP <code>` in the logs. A 404 usually means the model id is not available to your key; a 429 means quota |
 | `HTTP 429 from VirusTotal` | Public API rate limit | Space out lookups. The provider maps it to `status: "rate_limited"` and never treats it as clean |
+| Every request returns `401` | No `Authorization: Bearer <token>` header — or an expired/invalid token | Register or log in and send the token; see [API.md §0](API.md#0-authentication) |
+| A `401` right after registering twice with the same email | The second registration is rejected — the account already exists | Log in instead; the second attempt returns `409` |
+| `AUTH_SECRET_KEY is unset` warning at startup | The insecure development signing key is in use | Set `AUTH_SECRET_KEY` to a long random value before exposing the service |
+| `409` when registering | That email is already registered | Log in with the existing password |
+| `422` when registering | Password shorter than 8 characters, or over 72 bytes (bcrypt's limit — rejected rather than truncated), or an invalid email | Use a password of 8–72 bytes |
 
 ---
 
@@ -100,6 +105,9 @@ it is an environment problem, not a missing key.
 | A CORS error appears | You are calling the backend origin directly rather than through the Next proxy | Use the proxy (the default), or add the origin to `CORS_ORIGINS` |
 | Pages render "not configured" while keys are set | Keys live on the frontend service, or the backend needs a restart to pick them up | Move the keys to the backend; the UI reflects `/api/health` on the next load |
 | `npm run lint` opens an interactive prompt | `next lint` has no committed ESLint config by design | Do not use it as a gate. `npm run typecheck` and `npm run build` are the enforced frontend checks — see [TESTING.md](TESTING.md) |
+| Every page bounces to `/login` | No token is stored, or the stored token was rejected (expired/invalid) and the API client cleared the session | Sign in. A `401` from any API call clears the session and routes to `/login` by design |
+| Signed in, but the dashboard is empty while the API has data | The account is not the one that created those investigations | History is per account; legacy pre-auth rows (null `user_id`) are invisible to everyone. Use the same account that created the work |
+| "Your session has expired" immediately after signing in | Clock skew between the browser and the server, or a different `AUTH_SECRET_KEY` than the one that minted the token (e.g. changed after startup) | Restart the backend with a stable `AUTH_SECRET_KEY`, and check the host clock |
 
 ---
 
@@ -110,8 +118,11 @@ it is an environment problem, not a missing key.
 | `sqlite3.OperationalError: database is locked` | Concurrent writes against SQLite (single-writer by design) | Reduce concurrent submissions, or use PostgreSQL for multi-worker setups |
 | Tables look empty after a restart | A different database file is in play | Check the `database` field in `/api/health`; with `DATABASE_URL` unset the file is `backend/data/app.db` |
 | `asyncpg` connection refused | `DATABASE_URL` points at a PostgreSQL that is not running | Start PostgreSQL, or remove `DATABASE_URL` to fall back to SQLite |
-| A schema error after pulling a change | There is no migration framework; `create_tables()` only adds missing tables | Use a fresh database (delete `backend/data/app.db`) or write the migration yourself |
-| History has rows you did not create | The store is a single shared table with no tenancy — every run and test writes into it unless a temp URL is set | Delete rows via the API, or point `DATABASE_URL` at a scratch file for experiments |
+| A schema error after pulling a change | The schema is managed by Alembic; a database created by an older checkout may be behind | Run `cd backend && alembic upgrade head`. If the tables already existed before migrations were introduced, stamp instead: `alembic stamp head` |
+| `table investigations already exists` during `alembic upgrade` | The database was created by `create_tables()` before migrations existed | `alembic stamp head` — do not replay the initial migration against an existing schema |
+| `alembic` cannot find the database | `alembic.ini` leaves `sqlalchemy.url` blank on purpose | Set `DATABASE_URL` in the environment; the migration environment reads it from app settings |
+| `asyncpg` missing when using PostgreSQL | The dependency is in `requirements.txt` but the venv predates it | `.venv/Scripts/python.exe -m pip install -r requirements.txt` |
+| Rows from a previous version are not visible | Investigations created before authentication have a null `user_id` and are intentionally invisible to every account | Expected. Inspect them directly in the database if you need to migrate or delete them |
 
 ---
 
@@ -151,6 +162,8 @@ These paths are **configuration only** in this repository — they have never be
 | OCR works locally but not in the container | Tesseract missing from the image | The bundled `backend/Dockerfile` installs `tesseract-ocr`; use it rather than a stock Python image |
 | The frontend container cannot reach the backend | `BACKEND_URL` still points at `localhost` | Set it to `http://backend:8000` |
 | Health checks flap | PostgreSQL not ready when the backend starts | The compose file has a `pg_isready` healthcheck with `depends_on` — keep it |
+| The backend container exits immediately on start | The entrypoint ran `alembic upgrade head` and it failed (bad `DATABASE_URL`, or an existing schema) | Read the container logs; fix `DATABASE_URL`, or stamp the existing database |
+| `AUTH_SECRET_KEY is unset` warning in the logs | The insecure development default is in use | Set `AUTH_SECRET_KEY` in the root `.env` for the compose stack |
 
 ---
 

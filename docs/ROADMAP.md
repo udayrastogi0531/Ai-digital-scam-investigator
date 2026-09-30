@@ -12,11 +12,11 @@ repository contains — configuration that has never been run is configuration, 
 
 | Item | Why it matters | Done when |
 |---|---|---|
-| CI coverage for backend tests, evaluation, E2E, typecheck and build | Every gate currently depends on a human remembering to run it; there is no `.github/` workflow at all | A workflow runs the commands in [`CONTRIBUTING.md`](CONTRIBUTING.md#4-test-gates-by-change-type) on every push, and its badge is added only after it has actually run green |
-| Verified PostgreSQL path | The code path and compose file exist, but PostgreSQL was never exercised here, so the claim stays "not verified" | `docker compose up --build` (or a managed instance) has been run, the full E2E smoke passes against it, and the docs can say so |
-| Exercised Docker path | The Dockerfiles and compose file are untested here because the CLI was unavailable | `docker compose config`, `build` and `up` succeed, OCR works from the image's bundled Tesseract, and the health check reports it |
-| A shared rate-limit store | The limiter is per-process and in-memory, so limits reset on restart and do not apply across replicas; it also trusts a client-supplied `x-forwarded-for` | A Redis-backed or proxy-enforced limiter, with the trusted-hop configuration documented |
-| Retention and data-deletion tooling | There is no expiry policy or operator-facing way to purge history | A documented, configurable retention path exists and is tested |
+| Verified PostgreSQL path | The migration, the async engine path and an opt-in integration suite exist, but PostgreSQL was never exercised here, so the claim stays "not verified" | A real PostgreSQL instance has run `alembic upgrade head` and the full E2E check (`scripts/postgres_integration.py`) green, and the docs say so |
+| Exercised Docker path | The Dockerfiles and compose file are untested here because the CLI was unavailable | `docker compose config`, `build` and `up` succeed, migrations run via the entrypoint, OCR works from the image's bundled Tesseract, and the health check reports it |
+| Password reset, email verification, optional MFA | Authentication is email + password only; there is no recovery path if a password is lost | A documented, tested reset/verification flow, and the account-modelling implications decided |
+| A shared rate-limit store (only if multi-worker) | The limiter and the image cap are per-process; the deployment ships single-worker, where that is sufficient — see [`ARCHITECTURE.md` §18](ARCHITECTURE.md#18-concurrency-and-rate-limiting-why-per-process-a-decision-record) | Multi-worker or multi-replica operation is actually required, and then a PostgreSQL- or Redis-backed counter replaces the in-process one |
+| Retention and data-deletion tooling | There is no expiry policy or operator-facing way to purge history, and pre-auth legacy rows have no owner | A documented, configurable retention path exists and is tested |
 
 ---
 
@@ -27,6 +27,10 @@ unblocked.
 
 | Item | Completed | Evidence |
 |---|---|---|
+| Secure authentication and per-user isolation | bcrypt-hashed passwords, signed JWTs (`HS256`) with expiry and `token_version` invalidation, rate-limited and enumeration-resistant register/login; every investigation carries a `user_id` and list/detail/delete filter on it in the query | `core/auth.py`, `api/routes/auth.py`, `services/investigation_service.py`; `tests/test_auth.py` (21), `tests/test_authorization_isolation.py` (6); frontend `/login`, `/register` and the route guard |
+| Alembic migrations + a PostgreSQL integration path | Schema is managed by Alembic (URL from app settings, `alembic upgrade head` on container start); an opt-in check runs migrations and the full flow against PostgreSQL | `backend/alembic/`; `scripts/postgres_integration.py`; `tests/test_postgres_integration.py`. PostgreSQL itself remains **unverified here** (no server) |
+| CI coverage for backend tests, evaluation, E2E, typecheck and build | A GitHub Actions workflow runs the SQLite suite, the PostgreSQL suite against a service container, the detection harness with `--assert-baseline`, the E2E smoke, frontend typecheck/build, a secret scan and the docs link check | `.github/workflows/ci.yml` (written; not yet observed running on GitHub) |
+| Controlled load/concurrency test suite | Deterministic behaviour tests for concurrent text and image submissions, overflow `503` + `Retry-After`, slot release after success and failure, and rate-limit enforcement under concurrency; plus a measurement script | `tests/test_load.py` (5); `scripts/load_test.py` |
 | Handle Pillow's bomb guard and move the dimension cap before the decode | The pixel cap is now read from the image header and compared **before** `image.load()`, so an oversized image is rejected without being decompressed; `DecompressionBombError`, `DecompressionBombWarning` and a decode-time `MemoryError` are converted to the same `400` instead of surfacing as a server error | `core/security.py::read_image_upload`; `tests/test_upload_security.py` (14 tests, including an assertion that `load()` is not reached for an oversized image) |
 | Bound concurrent image processing | A single image was capped at 64 M pixels, but nothing bounded how many could be decoded at once; the gate in `core/concurrency.py` admits `MAX_CONCURRENT_IMAGE_OPS` (default 4) image investigations at a time, returns a retryable `503` beyond it, releases the slot in a `finally`, and the decode now runs off the event loop | `core/concurrency.py`; `tests/test_image_concurrency.py` (5 tests); [SECURITY.md](SECURITY.md) §2/§3 |
 | Remove the unused upload-storage helper | `core/security.py::persist_upload` was dead code that would have written an upload to disk with no cleanup path; it was deleted, leaving no persistence path at all | `core/security.py` (helper removed — no route ever called it) |
@@ -50,7 +54,7 @@ unblocked.
 | Item | Why it matters | Notes |
 |---|---|---|
 | Anonymisation or redaction on ingest | Submitted content routinely contains a real victim's own details | Requires an explicit decision about what is redacted versus what must be preserved for evidence quality |
-| Multi-user operation | The application is single-tenant, with no auth or isolation | A genuine architectural change; out of scope for a patch (see [`CONTRIBUTING.md`](CONTRIBUTING.md)) |
+| Team / organisational features | Basic authentication and per-user isolation now exist; what is missing is the multi-*user* workflow layer | Roles, organisations, sharing and an admin surface need a product decision before a technical one |
 | Case management workflow | Investigators work in queues and share findings | Needs a product decision before a technical one |
 | Provider breadth | More reputation sources reduce single-provider blind spots | Constrained by API terms and licensing, not by the provider interface, which already supports it |
 

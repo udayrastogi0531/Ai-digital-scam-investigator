@@ -158,9 +158,12 @@ excluded from the default run so that the suite is hermetic and a developer's ke
 into a network run.
 
 **Is this production-ready?**
-No. There is no authentication, no tenancy, no encryption at rest, no retention policy, and the rate
-limiter is in-process. It is a single-tenant local tool. [SECURITY.md §6](SECURITY.md#6-known-limitations-and-non-goals)
-lists the accepted risks rather than leaving them implied.
+It is close, but "production-ready" is not claimed. Authentication (bcrypt + JWT) and per-user
+isolation are implemented, migrations are managed by Alembic, and CI runs the gates — but there is no
+encryption at rest, no retention policy, no password reset or MFA, the rate limiter and image cap are
+per-process, PostgreSQL and Docker were not verified in this repository, and no capacity figure has
+been measured. [SECURITY.md §6](SECURITY.md#6-known-limitations-and-non-goals) lists the accepted risks
+rather than leaving them implied.
 
 ---
 

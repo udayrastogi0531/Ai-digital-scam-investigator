@@ -9,6 +9,44 @@ optional scope such as `fix(patterns):`). See [CONTRIBUTING.md §10](CONTRIBUTIN
 
 ---
 
+## 2026-09-30 — PostgreSQL migrations, authentication, multi-tenancy, CI and load testing
+
+A production-completion pass. Nothing about the detection pipeline changed — the 64-case baseline
+(accuracy / precision / recall / F1 all `1.0`, `0` FP, `0` FN, category 40/40, band 40/40) still holds.
+
+- `feat(db): add Alembic migrations and PostgreSQL integration support` — schema is now managed by
+  **Alembic** (`backend/alembic/`), whose environment reads `DATABASE_URL` from app settings so
+  migrations and the app cannot disagree. The initial migration creates every table including the new
+  `users` table and `investigations.user_id`. `create_tables()` remains as a zero-setup convenience for
+  SQLite and tests. An opt-in PostgreSQL end-to-end check (`scripts/postgres_integration.py`,
+  `tests/test_postgres_integration.py`) runs migrations then the full flow. **PostgreSQL was not
+  executed here** (no server) and is reported as unverified.
+- `feat(auth): add secure user authentication` — email + password registration and login. Passwords are
+  bcrypt-hashed (never stored, returned or logged); access tokens are signed JWTs (`HS256`) using
+  `AUTH_SECRET_KEY` from the environment, with an expiry and a `ver` claim checked against
+  `User.token_version` for server-side invalidation. Register and login are rate-limited and
+  enumeration-resistant. The app logs a loud warning when the development signing key is still in use.
+- `feat(authz): isolate investigations by user` — `investigations.user_id` (indexed) plus ownership as a
+  **query filter** on list/detail/delete, so a foreign id returns the same `404` a missing one does.
+  Pre-authentication rows carry a null `user_id` and are invisible to every account rather than exposed.
+- `test(auth): add authentication and authorization coverage` — `tests/test_auth.py` (21) and
+  `tests/test_authorization_isolation.py` (6).
+- `feat(web): add minimal authentication UI` — `/login` and `/register`, a client-side route guard over
+  the app shell, bearer-token handling in the API client (a `401` clears the session and routes to
+  `/login`), and sign-out in the shell. No redesign: the existing design system is reused.
+- `ci: add backend, frontend and database checks` — `.github/workflows/ci.yml` runs the SQLite suite, the
+  PostgreSQL integration suite against a service container, the detection harness with
+  `--assert-baseline`, the E2E smoke, frontend typecheck/build, a secret scan and the documentation
+  link check. No paid services and no real keys.
+- `test(load): add image concurrency and resource tests` — `tests/test_load.py` (5 deterministic
+  concurrency tests) plus `scripts/load_test.py`, a controlled in-process measurement. Results are
+  reported as a single-machine baseline, never as capacity.
+- `docs(deployment): document PostgreSQL, Docker and CI` — README and every affected doc updated for
+  authentication, multi-tenancy, migrations, the container entrypoint and the per-process limiter
+  decision ([ARCHITECTURE.md §18](ARCHITECTURE.md#18-concurrency-and-rate-limiting-why-per-process-a-decision-record)).
+- **Not verified in this environment:** PostgreSQL (no server) and Docker (no CLI). Both are configured
+  and reported as unverified rather than claimed.
+
 ## 2026-09-30 — bounded image concurrency
 
 - `fix(security): bound concurrent image processing` — the per-image 64 M-pixel cap did not bound how

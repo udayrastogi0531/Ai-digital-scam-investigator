@@ -5,8 +5,10 @@
 > All routes below are relative to the `/api` prefix. `API_PREFIX` changes the prefix;
 > `/docs` (Swagger UI) and `/openapi.json` are served by FastAPI while the server runs.
 
-**Authentication: none.** Every route is open to anyone who can reach the port. Do not expose this
-service to a network you do not control — see [`SECURITY.md`](SECURITY.md) §6.
+**Authentication: bearer token.** All data routes require `Authorization: Bearer <token>`; only
+`GET /api/health`, `POST /api/auth/register`, `POST /api/auth/login` and `GET /api/demo` are public.
+A missing, expired or invalid token returns `401`. See §0 — and still do not expose this service to a
+network you do not control ([`SECURITY.md`](SECURITY.md) §6).
 
 **Content types.** `POST /api/investigations`, `/api/analyze/url`, `/api/analyze/image` and
 `/api/demo/{slug}` take **multipart form data**. `POST /api/analyze/text` takes a **JSON body**.
@@ -21,6 +23,7 @@ offline path is milliseconds). There is no job id to poll and no queue.
 
 | # | Section |
 |---|---|
+| 0 | [Authentication](#0-authentication) |
 | 1 | [Endpoint summary](#1-endpoint-summary) |
 | 2 | [Rate limiting](#2-rate-limiting) |
 | 3 | [Errors](#3-errors) |
@@ -34,23 +37,73 @@ offline path is milliseconds). There is no job id to poll and no queue.
 
 ---
 
+## 0. Authentication
+
+Passwords are hashed with **bcrypt** and never stored or returned. Access tokens are signed **JWTs**
+(`HS256`), signed with `AUTH_SECRET_KEY` from the environment, valid for `AUTH_TOKEN_EXPIRE_MINUTES`
+(default 24 h). The server keeps no session table; `User.token_version` can invalidate outstanding
+tokens.
+
+```bash
+BASE=http://localhost:8000
+
+# Register (returns a token immediately) — password >= 8 characters
+TOKEN=$(curl -s -X POST $BASE/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"analyst@example.com","password":"a-strong-passphrase"}' \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+# …or log in
+TOKEN=$(curl -s -X POST $BASE/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"analyst@example.com","password":"a-strong-passphrase"}' \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+# Use it on any protected route
+curl -s $BASE/api/investigations -H "Authorization: Bearer $TOKEN"
+```
+
+| Method | Path | Auth | Body | Returns |
+|---|---|---|---|---|
+| `POST` | `/api/auth/register` | Public | `{email, password, display_name?}` | `201` `TokenResponse` |
+| `POST` | `/api/auth/login` | Public | `{email, password}` | `200` `TokenResponse` |
+| `GET` | `/api/auth/me` | Bearer | — | `UserPublic` |
+| `POST` | `/api/auth/logout` | Bearer | — | `204 No Content` |
+
+`TokenResponse` = `{ access_token, token_type: "bearer", expires_in, user }`, where `user` is
+`{ id, email, display_name, created_at }` — the password hash is never part of any response.
+
+**Logout** is client-side: the token is stateless, so the client discards it. Server-side invalidation
+is available by bumping `token_version` (all of an account's tokens then fail validation).
+
+**Isolation.** Investigations belong to their creating account. `GET /api/investigations` returns only
+the caller's rows; `GET`/`DELETE` on another account's id returns `404` — identical to a nonexistent
+id, so ownership cannot be probed.
+
+---
+
 ## 1. Endpoint summary
 
-| Method | Path | Body | Returns |
-|---|---|---|---|
-| `GET` | `/api/health` | — | Provider/mode status, database, version |
-| `POST` | `/api/investigations` | multipart: `text`, `urls[]`, `title`, `source_label`, `image` | `InvestigationSummary` |
-| `GET` | `/api/investigations` | query: `page`, `page_size`, `search`, `risk_level`, `scam_type`, `input_type` | `PaginatedInvestigations` |
-| `GET` | `/api/investigations/{id}` | — | `InvestigationView` |
-| `DELETE` | `/api/investigations/{id}` | — | `204 No Content` |
-| `POST` | `/api/analyze/text` | JSON `{text?, urls?, title?, source_label?}` | `InvestigationSummary` |
-| `POST` | `/api/analyze/url` | multipart: `url` (required), `title` | `InvestigationSummary` |
-| `POST` | `/api/analyze/image` | multipart: `image` (required), `text`, `title` | `InvestigationSummary` |
-| `GET` | `/api/demo` | — | Demo case index |
-| `POST` | `/api/demo/{slug}` | — | `InvestigationSummary` |
+| Method | Path | Auth | Body | Returns |
+|---|---|---|---|---|
+| `GET` | `/api/health` | Public | — | Provider/mode status, database, version |
+| `POST` | `/api/auth/register` | Public | JSON `{email, password, display_name?}` | `TokenResponse` |
+| `POST` | `/api/auth/login` | Public | JSON `{email, password}` | `TokenResponse` |
+| `GET` | `/api/auth/me` | Bearer | — | `UserPublic` |
+| `POST` | `/api/auth/logout` | Bearer | — | `204 No Content` |
+| `POST` | `/api/investigations` | Bearer | multipart: `text`, `urls[]`, `title`, `source_label`, `image` | `InvestigationSummary` |
+| `GET` | `/api/investigations` | Bearer | query: `page`, `page_size`, `search`, `risk_level`, `scam_type`, `input_type` | `PaginatedInvestigations` |
+| `GET` | `/api/investigations/{id}` | Bearer | — | `InvestigationView` |
+| `DELETE` | `/api/investigations/{id}` | Bearer | — | `204 No Content` |
+| `POST` | `/api/analyze/text` | Bearer | JSON `{text?, urls?, title?, source_label?}` | `InvestigationSummary` |
+| `POST` | `/api/analyze/url` | Bearer | multipart: `url` (required), `title` | `InvestigationSummary` |
+| `POST` | `/api/analyze/image` | Bearer | multipart: `image` (required), `text`, `title` | `InvestigationSummary` |
+| `GET` | `/api/demo` | Public | — | Demo case index |
+| `POST` | `/api/demo/{slug}` | Bearer | — | `InvestigationSummary` |
 
-Rate-limited routes: every `POST` above, plus `GET /api/demo` (the demo and analyze routers attach the
-limiter at router level). The investigation list, detail, delete and health routes are not rate-limited.
+Rate-limited routes: every `POST` above, plus `GET /api/demo` (the auth, demo and analyze routers
+attach the limiter at router level). The investigation list, detail, delete and health routes are not
+rate-limited.
 
 ---
 
@@ -84,7 +137,9 @@ Errors use FastAPI's standard envelope and are the only error shape you need to 
 | Status | When |
 |---|---|
 | `400` | Rejected upload: empty file, oversized, not a decodable image, or dimensions above the pixel cap |
-| `404` | Unknown investigation id, unknown demo slug |
+| `401` | Missing, malformed, expired or invalidated bearer token |
+| `404` | Unknown investigation id — or one owned by another account (deliberately indistinguishable) — and unknown demo slug |
+| `409` | Registration rejected because the email already exists |
 | `422` | Validation failure — no input supplied, text over 50,000 characters, more than 20 URLs, or a malformed query parameter (e.g. an invalid `risk_level`) |
 | `429` | Rate limit exceeded |
 | `503` | Image processing is at capacity (`MAX_CONCURRENT_IMAGE_OPS`, default 4) — sent only on image submissions; retry after the `Retry-After` interval |
@@ -313,23 +368,30 @@ fields is load-bearing: **`verdict`** is the reputation finding (`safe` / `suspi
 ```bash
 BASE=http://localhost:8000
 
+# 0. Authenticate (all data routes need the token)
+TOKEN=$(curl -s -X POST $BASE/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"walkthrough@example.com","password":"a-strong-passphrase"}' \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+AUTH="Authorization: Bearer $TOKEN"
+
 # 1. Confirm which providers are actually live
 curl -s $BASE/api/health | python -m json.tool
 
 # 2. Submit evidence (text + URL + screenshot)
-ID=$(curl -s -X POST $BASE/api/investigations \
+ID=$(curl -s -X POST $BASE/api/investigations -H "$AUTH" \
   -F 'text=URGENT: your parcel is held. Pay the $2.99 redelivery fee at http://track-parcel.example/fee within 24 hours.' \
   -F 'urls=http://track-parcel.example/fee' \
   -F 'image=@screenshot.png' | python -c 'import json,sys; print(json.load(sys.stdin)["investigation_id"])')
 
 # 3. Read the full result
-curl -s $BASE/api/investigations/$ID | python -m json.tool
+curl -s $BASE/api/investigations/$ID -H "$AUTH" | python -m json.tool
 
 # 4. Confirm it landed in history and can be filtered
-curl -s "$BASE/api/investigations?risk_level=MEDIUM" | python -m json.tool
+curl -s "$BASE/api/investigations?risk_level=MEDIUM" -H "$AUTH" | python -m json.tool
 
 # 5. Clean up
-curl -s -X DELETE $BASE/api/investigations/$ID -o /dev/null -w '%{http_code}\n'
+curl -s -X DELETE $BASE/api/investigations/$ID -H "$AUTH" -o /dev/null -w '%{http_code}\n'
 ```
 
 The same flows are exercised automatically by `scripts/end_to_end_smoke.py` (12 flows) and by
