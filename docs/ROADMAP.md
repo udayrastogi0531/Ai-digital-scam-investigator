@@ -15,10 +15,20 @@ repository contains — configuration that has never been run is configuration, 
 | CI coverage for backend tests, evaluation, E2E, typecheck and build | Every gate currently depends on a human remembering to run it; there is no `.github/` workflow at all | A workflow runs the commands in [`CONTRIBUTING.md`](CONTRIBUTING.md#4-test-gates-by-change-type) on every push, and its badge is added only after it has actually run green |
 | Verified PostgreSQL path | The code path and compose file exist, but PostgreSQL was never exercised here, so the claim stays "not verified" | `docker compose up --build` (or a managed instance) has been run, the full E2E smoke passes against it, and the docs can say so |
 | Exercised Docker path | The Dockerfiles and compose file are untested here because the CLI was unavailable | `docker compose config`, `build` and `up` succeed, OCR works from the image's bundled Tesseract, and the health check reports it |
-| Handle Pillow's bomb guard and move the dimension cap before the decode | `DecompressionBombError` derives from `Exception`, not `OSError`, so an absurdly large image returns a server error instead of a clean `400`; the 64 M-pixel cap is evaluated after the image is already decoded | Both are converted into a `400` without a full decode, with tests |
 | A shared rate-limit store | The limiter is per-process and in-memory, so limits reset on restart and do not apply across replicas; it also trusts a client-supplied `x-forwarded-for` | A Redis-backed or proxy-enforced limiter, with the trusted-hop configuration documented |
 | Remove the unused upload-storage helper | `core/security.py::persist_upload` writes an upload to disk but no route calls it, so it is dead code that invites a future change to enable persistence without a cleanup path | The helper is either deleted, or wired in together with image lifecycle handling and a test |
 | Retention and data-deletion tooling | There is no expiry policy or operator-facing way to purge history | A documented, configurable retention path exists and is tested |
+
+---
+
+## Recently completed
+
+Kept here rather than deleted, so the reasoning behind a change stays visible next to the work it
+unblocked.
+
+| Item | Completed | Evidence |
+|---|---|---|
+| Handle Pillow's bomb guard and move the dimension cap before the decode | The pixel cap is now read from the image header and compared **before** `image.load()`, so an oversized image is rejected without being decompressed; `DecompressionBombError`, `DecompressionBombWarning` and a decode-time `MemoryError` are converted to the same `400` instead of surfacing as a server error | `core/security.py::read_image_upload`; `tests/test_upload_security.py` (14 tests, including an assertion that `load()` is not reached for an oversized image) |
 
 ---
 

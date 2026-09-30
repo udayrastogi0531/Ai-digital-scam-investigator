@@ -11,9 +11,11 @@ They also pin the privacy property the documentation relies on: a valid
 upload is analysed in memory and **nothing** is written to the upload
 directory.
 
-Two honest gaps are pinned here rather than described loosely (see
-``test_dimension_cap_is_applied_after_decode`` and
-``test_pillow_bomb_error_is_not_translated_to_a_400``).
+The order of the safety checks is part of the contract: dimensions are read
+from the header and compared against the cap *before* the pixel data is
+decoded, so an oversized image is rejected without ever being decompressed,
+and Pillow's own decompression-bomb guard (which derives from ``Exception``,
+not ``OSError``) is translated into the same 400 as every other rejection.
 """
 from __future__ import annotations
 
@@ -132,22 +134,21 @@ def test_rejected_upload_creates_no_investigation(client):
     assert client.get("/api/investigations").json()["total"] == before
 
 
-def test_dimension_cap_is_applied_after_decode(client, monkeypatch):
-    """Images above the 64M-pixel cap are rejected with a 400.
+def test_dimension_cap_is_checked_before_the_image_is_decoded(client, monkeypatch):
+    """Images above the 64M-pixel cap are rejected *without* being decoded.
 
-    ``read_image_upload`` calls ``image.load()`` **before** comparing
-    ``width * height``, so this cap limits what is *accepted* rather than
-    preventing the decode itself. A stub keeps the test cheap: a genuine
-    64M+ pixel image would allocate hundreds of megabytes to reach the same
-    branch.
+    The dimensions come from the header, which ``Image.open`` reads eagerly, so
+    the cap can be enforced before ``load()`` allocates the pixel buffer. The
+    stub records whether the decode was reached; a genuine 64M+ pixel image
+    would allocate hundreds of megabytes to exercise the same branch.
     """
+    decoded: list[bool] = []
 
     class _HugeImage:
-        width = 20_000
-        height = 20_000
+        size = (20_000, 20_000)  # 400 M pixels, six times the cap
 
         def load(self) -> None:
-            pass  # the real code decodes first; the cap is checked afterwards
+            decoded.append(True)
 
     monkeypatch.setattr("PIL.Image.open", lambda *a, **k: _HugeImage())
 
@@ -158,29 +159,59 @@ def test_dimension_cap_is_applied_after_decode(client, monkeypatch):
     )
     assert resp.status_code == 400
     assert "dimensions" in resp.json()["detail"].lower()
+    assert not decoded, "oversized image was decoded before the cap was applied"
 
 
-def test_pillow_bomb_error_is_not_translated_to_a_400(client, monkeypatch):
-    """DOCUMENTED GAP: Pillow's own bomb guard is not handled.
+@pytest.mark.parametrize(
+    "error",
+    [Image.DecompressionBombError("too many pixels"), Image.DecompressionBombWarning("too many pixels")],
+    ids=["bomb-error", "bomb-warning"],
+)
+def test_pillow_bomb_guard_becomes_a_400_not_a_server_error(client, monkeypatch, error):
+    """Pillow's own bomb guard is translated into the standard rejection.
 
-    Above roughly 178M pixels Pillow raises ``DecompressionBombError``, which
-    derives from ``Exception`` — not ``OSError`` — so it is neither caught by
-    ``read_image_upload``'s handler (400) nor by the route's generic handler,
-    and the client sees a server error instead of a clean rejection. Pinned
-    here so that fixing it stays a deliberate, reviewable change.
+    ``DecompressionBombError`` derives from ``Exception``, not ``OSError``, so
+    an unnamed handler lets it escape as a 500. Raising it from ``Image.open``
+    is exactly where Pillow raises it — while reading the header, before any
+    pixel data is decoded.
     """
 
     def _raise(*args, **kwargs):
-        raise Image.DecompressionBombError("too many pixels")
+        raise error
 
     monkeypatch.setattr("PIL.Image.open", _raise)
 
-    with pytest.raises(Image.DecompressionBombError):
-        client.post(
-            "/api/analyze/image",
-            files={"image": ("bomb.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 64, "image/png")},
-            data={"text": BENIGN_NOTE},
-        )
+    resp = client.post(
+        "/api/analyze/image",
+        files={"image": ("bomb.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 64, "image/png")},
+        data={"text": BENIGN_NOTE},
+    )
+    assert resp.status_code == 400
+    assert "too large" in resp.json()["detail"].lower()
+
+
+def test_decode_time_exhaustion_is_reported_as_too_large(client, monkeypatch):
+    """A cap-sized file that still exhausts memory on decode is a clean 400.
+
+    ``MemoryError`` is neither an ``OSError`` nor an ``HTTPException``; without
+    an explicit clause it would surface as a server error.
+    """
+
+    class _ExplodingImage:
+        size = (800, 600)
+
+        def load(self) -> None:
+            raise MemoryError("cannot allocate pixel buffer")
+
+    monkeypatch.setattr("PIL.Image.open", lambda *a, **k: _ExplodingImage())
+
+    resp = client.post(
+        "/api/analyze/image",
+        files={"image": ("bomb.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 64, "image/png")},
+        data={"text": BENIGN_NOTE},
+    )
+    assert resp.status_code == 400
+    assert "too large" in resp.json()["detail"].lower()
 
 
 # --- control case -----------------------------------------------------------

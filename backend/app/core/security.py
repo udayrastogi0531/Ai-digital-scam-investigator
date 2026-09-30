@@ -16,6 +16,10 @@ from fastapi import HTTPException, UploadFile
 from app.core.config import get_settings
 
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+# Our own pixel cap.  Deliberately below Pillow's default ``MAX_IMAGE_PIXELS``
+# (~89 M), so an oversized image is rejected on the application's terms rather
+# than Pillow's.
+_MAX_PIXELS = 64_000_000
 
 
 class UnsafeUploadError(HTTPException):
@@ -45,19 +49,41 @@ async def read_image_upload(upload: UploadFile) -> bytes:
     if not data:
         raise UnsafeUploadError("Empty file")
 
+    import io
+
     from PIL import Image, UnidentifiedImageError
 
-    try:
-        import io
+    # ``DecompressionBombError`` derives from ``Exception`` — *not* from
+    # ``OSError`` — so it is invisible to the handler below unless it is named
+    # explicitly.  Left uncaught it escapes this function entirely and the
+    # client sees a 500 instead of a validation error.  Pillow raises it while
+    # reading the header (above ``Image.MAX_IMAGE_PIXELS`` it warns above
+    # ~89 M pixels, above twice that it raises), i.e. before any pixels are
+    # decoded.
+    _BOMB = (Image.DecompressionBombError, Image.DecompressionBombWarning)
 
+    try:
         image = Image.open(io.BytesIO(data))
-        image.load()
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise UnsafeUploadError("Uploaded file is not a valid image") from exc
+    except (*_BOMB, MemoryError) as exc:
+        raise UnsafeUploadError("Image is too large to process safely") from exc
 
-    # decompression-bomb protection
-    if image.width * image.height > 64_000_000:
+    # Decompression-bomb protection, checked *before* the decode.
+    # ``Image.open`` reads only the header, so ``image.size`` is known without
+    # allocating the pixel buffer that ``load()`` would create; an oversized
+    # image is therefore rejected without ever being decompressed.
+    if image.size[0] * image.size[1] > _MAX_PIXELS:
         raise UnsafeUploadError("Image dimensions are too large")
+
+    try:
+        image.load()
+    except (*_BOMB, MemoryError) as exc:
+        # A cap-sized image can still blow up on decode (a truncated file that
+        # declares large dimensions, or a format that expands at load time).
+        raise UnsafeUploadError("Image is too large to process safely") from exc
+    except (OSError, ValueError) as exc:
+        raise UnsafeUploadError("Uploaded file is not a valid image") from exc
     return data
 
 

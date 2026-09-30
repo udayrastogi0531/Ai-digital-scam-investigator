@@ -9,6 +9,19 @@ optional scope such as `fix(patterns):`). See [CONTRIBUTING.md §10](CONTRIBUTIN
 
 ---
 
+## 2026-09-30 — upload hardening
+
+- `fix(security): harden image decompression handling` — the pixel cap in
+  `core/security.py::read_image_upload` was evaluated *after* `image.load()`, so an oversized image was
+  fully decompressed before being rejected, and Pillow's own guard (`DecompressionBombError`,
+  `DecompressionBombWarning`) derives from `Exception` rather than `OSError`, so it escaped the
+  validation handler and reached the client as a server error. The dimensions are now read from the
+  header and checked before the decode, and the bomb exceptions plus a decode-time `MemoryError` are
+  translated into the standard `400`. `tests/test_upload_security.py` grew from 12 to 14 tests and now
+  asserts that the decode is not reached for an oversized image. Both gaps were previously listed in
+  [ROADMAP.md](ROADMAP.md) and as residual risk in [SECURITY.md](SECURITY.md); those entries were
+  updated in the same commit.
+
 ## 2026-09-29 — documentation closeout
 
 The engineering is fully described; this day was about making the documentation match the code and

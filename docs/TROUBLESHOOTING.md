@@ -82,7 +82,8 @@ it is an environment problem, not a missing key.
 |---|---|---|
 | `400 Uploaded file is not a valid image` | The bytes are not decodable by Pillow. The declared content type is deliberately **not** trusted | Re-export the screenshot as PNG/JPEG. A renamed `.txt` will still be rejected, which is the intent |
 | `400 File too large (max N MB)` | The upload exceeds `MAX_UPLOAD_MB` (default 10) | Crop or downscale the image, or raise the limit deliberately |
-| `400 Image dimensions are too large` | The pixel-count cap (decompression-bomb protection) was exceeded | Downscale the image before uploading |
+| `400 Image dimensions are too large` | The image header declares more than the 64 M-pixel cap. The cap is applied before the pixels are decoded, so nothing was decompressed | Downscale the image before uploading |
+| `400 Image is too large to process safely` | Pillow's own decompression-bomb guard tripped while reading the header (above ~178 M pixels), or the decode ran out of memory | Downscale the image. This is a deliberate rejection, not a bug — see [`SECURITY.md`](SECURITY.md) §2 |
 | `OCR unavailable (...) — continuing without extracted text` | No `tesseract` binary, or the process failed | Install Tesseract (`OCR_PROVIDER=auto` detects it), or install `tesseract-ocr` via the Dockerfile |
 | OCR extracts text but the investigation still looks thin | OCR text joins the same pipeline as typed text; a screenshot of a short message yields weak evidence | Add the message context as text alongside the image |
 | Nothing is ever written to `backend/data/uploads/` | Correct — screenshots are decoded and analysed **in memory** and are never persisted. The directory may exist from an older revision | Nothing to fix. This is a privacy property, not a failure |
