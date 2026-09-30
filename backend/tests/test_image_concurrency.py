@@ -69,12 +69,13 @@ def test_normal_image_succeeds_and_releases_its_slot(client, one_slot):
     assert get_gate().in_use == 0
 
 
-def test_extra_image_request_is_refused_while_capacity_is_full(one_slot, monkeypatch):
+def test_extra_image_request_is_refused_while_capacity_is_full(client, one_slot, monkeypatch):
     """One in-flight investigation fills a single slot; the next gets a 503."""
+    auth = {"Authorization": client.headers["Authorization"]}
     entered = asyncio.Event()
     release = asyncio.Event()
 
-    async def _blocking_submission(db, payload, image_bytes=None):
+    async def _blocking_submission(db, payload, image_bytes=None, *, user_id=None):
         entered.set()
         await release.wait()
         return InvestigationSummary(investigation_id="stub", title="stub", status="completed")
@@ -83,7 +84,7 @@ def test_extra_image_request_is_refused_while_capacity_is_full(one_slot, monkeyp
 
     async def _run():
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver", headers=auth) as ac:
             first = asyncio.create_task(
                 ac.post(
                     "/api/analyze/image",
@@ -126,7 +127,7 @@ def test_slot_is_released_when_processing_raises(client, one_slot, monkeypatch):
     ``503``; the assertion that it is again the ``400`` proves the release.
     """
 
-    async def _boom(db, payload, image_bytes=None):
+    async def _boom(db, payload, image_bytes=None, *, user_id=None):
         raise HTTPException(status_code=400, detail="processing failed")
 
     monkeypatch.setattr("app.api.routes.analyze._run_submission", _boom)

@@ -64,9 +64,34 @@ def _env_setup() -> None:
     os.environ["GOOGLE_SAFE_BROWSING_API_KEY"] = ""
     os.environ["VIRUSTOTAL_API_KEY"] = ""
     os.environ["LLM_API_KEY"] = ""
+    # The API now requires an authenticated caller; this harness registers a
+    # throwaway user (see ``_authenticate``).  A deterministic signing key keeps
+    # the harness self-contained and independent of any local ``.env``.
+    os.environ.setdefault("AUTH_SECRET_KEY", "evaluation-harness-signing-key-32-bytes-min")
     model = BACKEND_DIR / "app" / "ml" / "models" / "lr_scam_model.joblib"
     if model.exists():
         os.environ.setdefault("ML_MODEL_PATH", str(model))
+
+
+def _authenticate(client) -> None:
+    """Register a throwaway user and attach its token to every request.
+
+    The evaluation submits through the real endpoints, which require auth; the
+    account is incidental to the measurement and exists only so the corpus can
+    be driven exactly like a real client.
+    """
+    import uuid
+
+    resp = client.post(
+        "/api/auth/register",
+        json={
+            "email": f"evaluation-{uuid.uuid4().hex[:8]}@example.com",
+            "password": "evaluation-harness-passphrase",
+        },
+    )
+    if resp.status_code != 201:
+        raise SystemExit(f"evaluation harness could not authenticate: {resp.status_code} {resp.text[:300]}")
+    client.headers["Authorization"] = f"Bearer {resp.json()['access_token']}"
 
 
 def _binary_metrics(tp: int, fp: int, fn: int, tn: int) -> dict:
@@ -152,6 +177,7 @@ def main() -> None:
     cases = _load_cases()
     results: list[dict] = []
     with TestClient(app) as client:
+        _authenticate(client)
         for case in cases:
             outcome = _collect(client, case)
             outcome["expected"] = case["expected"]
@@ -183,6 +209,44 @@ def main() -> None:
           f"false negatives: {len(report['false_negatives'])}  "
           f"band misses: {len(report['band_misses'])}")
     print(f"reports written: {REPORT_JSON.name}, {REPORT_MD.name}")
+    if "--assert-baseline" in sys.argv:
+        _assert_baseline(report)
+
+
+# The verified detection baseline.  CI asserts against it so a regression that
+# changes scoring fails the build instead of silently lowering quality.
+BASELINE = {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "false_positives": 0,
+    "false_negatives": 0,
+}
+
+
+def _assert_baseline(report: dict) -> None:
+    """Exit non-zero if detection metrics regressed below the baseline."""
+    problems: list[str] = []
+    overall = report.get("binary_overall", {})
+    for key in ("accuracy", "precision", "recall", "f1"):
+        if overall.get(key) != BASELINE[key]:
+            problems.append(f"{key}={overall.get(key)} (expected {BASELINE[key]})")
+    if len(report.get("false_positives", [])) != BASELINE["false_positives"]:
+        problems.append(f"false_positives={len(report['false_positives'])}")
+    if len(report.get("false_negatives", [])) != BASELINE["false_negatives"]:
+        problems.append(f"false_negatives={len(report['false_negatives'])}")
+    if report.get("category_correct") != report.get("category_total"):
+        problems.append(
+            f"category {report.get('category_correct')}/{report.get('category_total')}"
+        )
+    if report.get("band_compliant") != report.get("band_total"):
+        problems.append(f"band {report.get('band_compliant')}/{report.get('band_total')}")
+    if report.get("errors"):
+        problems.append(f"errors={len(report['errors'])}")
+    if problems:
+        raise SystemExit("DETECTION BASELINE REGRESSION: " + "; ".join(problems))
+    print("baseline assertion passed (acc/prec/rec/F1 = 1.0, 0 FP, 0 FN, category & band complete)")
 
 
 def _evaluate(outcome: dict, expected: dict) -> str:

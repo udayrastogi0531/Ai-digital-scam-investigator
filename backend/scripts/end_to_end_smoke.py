@@ -14,10 +14,27 @@ sys.path.insert(0, str(BACKEND_DIR))
 tmpdir = tempfile.mkdtemp(prefix="scaminv_smoke_")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{tmpdir}/smoke.db"
 os.environ["ML_MODEL_PATH"] = str(BACKEND_DIR / "app" / "ml" / "models" / "lr_scam_model.joblib")
+os.environ.setdefault("AUTH_SECRET_KEY", "smoke-test-signing-key-32-bytes-minimum")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
+
+
+def _authenticate(client) -> None:
+    """Register a throwaway user; the data endpoints require a bearer token."""
+    import uuid
+
+    resp = client.post(
+        "/api/auth/register",
+        json={
+            "email": f"smoke-{uuid.uuid4().hex[:8]}@example.com",
+            "password": "smoke-test-passphrase",
+        },
+    )
+    if resp.status_code != 201:
+        raise SystemExit(f"smoke test could not authenticate: {resp.status_code} {resp.text[:300]}")
+    client.headers["Authorization"] = f"Bearer {resp.json()['access_token']}"
 
 
 def main() -> None:
@@ -25,6 +42,8 @@ def main() -> None:
         # health
         r = client.get("/api/health")
         print("health:", r.status_code, r.json().get("status"))
+
+        _authenticate(client)
 
         # demo cases (no paid APIs)
         demos = client.get("/api/demo").json()["cases"]
@@ -68,8 +87,11 @@ def main() -> None:
         print("filter HIGH:", r.json().get("total"))
         r = client.delete(f"/api/investigations/{last_id}")
         print("delete:", r.status_code)
+        if r.status_code != 204:
+            failed.append("delete")
         print("OK:", ok, "FAILED:", failed if failed else "none")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
