@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Activity, History, LayoutDashboard, Menu, Plus, X } from "lucide-react";
-import { getHealth } from "@/lib/api";
+import { Activity, History, LayoutDashboard, LogOut, Menu, Plus, X } from "lucide-react";
+import { getHealth, logout } from "@/lib/api";
+import { getStoredUser, type StoredUser } from "@/lib/auth";
 import type { HealthInfo } from "@/lib/types";
 import { systemState } from "@/lib/types";
 import { Logo } from "@/components/ui";
@@ -33,6 +34,14 @@ function useHealth() {
   return health;
 }
 
+function useStoredUser(): StoredUser | null {
+  const [user, setUser] = useState<StoredUser | null>(null);
+  useEffect(() => {
+    setUser(getStoredUser());
+  }, []);
+  return user;
+}
+
 function SystemPill({ health }: { health: HealthInfo | null }) {
   if (!health) {
     return (
@@ -58,13 +67,20 @@ function SystemPill({ health }: { health: HealthInfo | null }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const health = useHealth();
+  const user = useStoredUser();
   const [open, setOpen] = useState(false);
 
   // close the mobile menu on navigation
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  async function signOut() {
+    await logout(); // clears the local session even if the call fails
+    router.replace("/login");
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -91,6 +107,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="hidden items-center gap-3 md:flex">
             <SystemPill health={health} />
+            {user?.email && (
+              <span
+                className="hidden max-w-[180px] truncate font-mono text-xs text-slate-500 lg:block"
+                title={user.email}
+              >
+                {user.email}
+              </span>
+            )}
+            <button type="button" onClick={signOut} className="btn-ghost btn-sm" title="Sign out">
+              <LogOut className="h-3.5 w-3.5" aria-hidden /> Sign out
+            </button>
             <Link href="/investigate" className="btn-primary btn-sm">
               <Plus className="h-3.5 w-3.5" aria-hidden /> New
             </Link>
@@ -122,6 +149,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link href="/investigate" className="btn-primary mt-2">
                 <Plus className="h-4 w-4" aria-hidden /> New investigation
               </Link>
+              <button type="button" onClick={signOut} className="btn-ghost mt-1">
+                <LogOut className="h-4 w-4" aria-hidden /> Sign out
+              </button>
             </div>
           </nav>
         )}

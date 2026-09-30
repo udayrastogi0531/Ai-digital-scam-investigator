@@ -14,11 +14,15 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Same-origin proxy target; overridden per environment.
 ENV BACKEND_URL=http://backend:8000
-COPY --from=build /app/package.json /app/next.config.mjs ./
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/public ./public
+COPY --from=build --chown=node:node /app/package.json /app/next.config.mjs ./
+COPY --from=build --chown=node:node /app/.next ./.next
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/public ./public
+
+# Drop privileges (the node image ships a `node` user).
+USER node
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]

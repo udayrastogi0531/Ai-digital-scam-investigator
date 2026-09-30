@@ -322,7 +322,7 @@ const STACK_LAYERS = [
 const SECURITY_POINTS = [
   { icon: Lock, text: "No secrets in the frontend — API keys live server-side only." },
   { icon: Globe, text: "No arbitrary URL fetching — the engine analyzes structure, not remote content." },
-  { icon: ShieldCheck, text: "Uploads are sniffed, size-capped and stored under random names." },
+  { icon: ShieldCheck, text: "Uploads are sniffed, size- and pixel-capped, and never written to disk." },
   { icon: Database, text: "Submitted content stays on your own deployment." },
 ];
 

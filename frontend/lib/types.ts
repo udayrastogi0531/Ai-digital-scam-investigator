@@ -1,5 +1,19 @@
 // Mirrors of the backend Pydantic schemas (app/schemas/*.py).
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  created_at?: string | null;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: AuthUser;
+}
+
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type Severity = "low" | "medium" | "high" | "critical" | "info";
 
