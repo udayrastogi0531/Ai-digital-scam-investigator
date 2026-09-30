@@ -1,9 +1,21 @@
+# Reproducible local stack: PostgreSQL + API + web.
+#
+#   cp .env.example .env      # then edit if you have real provider keys
+#   docker compose up --build
+#
+# Then:  API health  http://localhost:8000/api/health
+#        API docs    http://localhost:8000/docs
+#        Web app     http://localhost:3000
+#
+# Nothing here embeds a real secret.  The values below are local-development
+# defaults and MUST be overridden for any shared/production deployment
+# (POSTGRES_PASSWORD and, above all, AUTH_SECRET_KEY).
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: scaminv
-      POSTGRES_PASSWORD: scaminv
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scaminv}
       POSTGRES_DB: scaminv
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -12,12 +24,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://scaminv:scaminv@postgres:5432/scaminv
-      # Demo providers when keys are absent; set these to go live:
+      DATABASE_URL: postgresql+asyncpg://scaminv:${POSTGRES_PASSWORD:-scaminv}@postgres:5432/scaminv
+      # REQUIRED in any real deployment: set AUTH_SECRET_KEY in .env.  The
+      # default is a throwaway development key flagged at startup.
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-dev-insecure-change-me-not-for-production}
+      # Providers default to their deterministic mock implementations; set the
+      # keys in .env to go live.
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -30,15 +47,19 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
     environment:
+      # Same-origin proxy target used by the Next.js rewrites.
       BACKEND_URL: http://backend:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:3000"
+    restart: unless-stopped
 
 volumes:
   pgdata:
