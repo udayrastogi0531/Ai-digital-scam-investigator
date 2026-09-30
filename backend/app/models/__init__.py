@@ -6,6 +6,7 @@ from .entities import (
     Investigation,
     Report,
     RiskAssessment,
+    User,
 )
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     "Investigation",
     "Report",
     "RiskAssessment",
+    "User",
 ]

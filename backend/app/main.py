@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analyze, demo, health, investigations
+from app.api.routes import analyze, auth, demo, health, investigations
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -36,6 +36,11 @@ async def lifespan(app: FastAPI):
         raise
     if settings.using_mock_llm:
         logger.warning("DEMO MODE: LLM provider is mock — explanations are deterministic, not LLM-generated.")
+    if settings.using_default_auth_secret:
+        logger.warning(
+            "AUTH_SECRET_KEY is unset — using the insecure development signing key. "
+            "Set AUTH_SECRET_KEY before exposing this deployment to anyone."
+        )
     yield
 
 
@@ -58,6 +63,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix=settings.api_prefix)
+app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(investigations.router, prefix=settings.api_prefix)
 app.include_router(analyze.router, prefix=settings.api_prefix)
 app.include_router(demo.router, prefix=settings.api_prefix)

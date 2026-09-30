@@ -23,10 +23,41 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class User(Base):
+    """An authenticated account.
+
+    Passwords are never stored: only a bcrypt hash (see
+    ``app/core/auth.py``).  ``token_version`` is bumped when every previously
+    issued access token for the account must stop working (e.g. after a
+    password change) — the stateless analogue of server-side revocation.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+    investigations: Mapped[list["Investigation"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
 class Investigation(Base):
     __tablename__ = "investigations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # Owner.  Nullable so a database created before authentication existed can
+    # migrate without a backfill; every row written by the application from now
+    # on carries an owner.  Legacy rows (user_id IS NULL) are intentionally
+    # invisible to every user — they are never returned by a scoped query.
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=True
+    )
     title: Mapped[str] = mapped_column(String(255), default="Untitled investigation")
     input_types: Mapped[list] = mapped_column(JSON, default=list)  # ["text","url","image"]
     raw_input_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -36,6 +67,8 @@ class Investigation(Base):
     processing_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+    user: Mapped["User | None"] = relationship(back_populates="investigations")
 
     evidence: Mapped[list["Evidence"]] = relationship(
         back_populates="investigation", cascade="all, delete-orphan", lazy="selectin"

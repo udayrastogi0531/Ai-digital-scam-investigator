@@ -10,6 +10,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
+# Throwaway development signing key.  Deliberately obvious and >= 32 bytes so
+# it is at least well-formed; it is flagged loudly at startup and must be
+# replaced via AUTH_SECRET_KEY for any real deployment.
+_DEV_AUTH_SECRET = "dev-insecure-change-me-not-for-production"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -29,6 +34,18 @@ class Settings(BaseSettings):
     # PostgreSQL is used in docker-compose.  SQLite is the zero-dependency
     # local fallback so the app runs even without a database server.
     database_url: str = f"sqlite+aiosqlite:///{BACKEND_DIR / 'data' / 'app.db'}"
+
+    # --- Authentication ---
+    # The signing key for access tokens.  It MUST be set from the environment
+    # in any real deployment; the default exists only so a fresh local checkout
+    # and the test suite can run with zero setup.  The application logs a loud
+    # warning at startup when the default is still in use (see app/main.py).
+    auth_secret_key: str = _DEV_AUTH_SECRET  # noqa: S105 (documented dev default)
+    auth_algorithm: str = "HS256"
+    auth_token_expire_minutes: int = 1440  # 24h
+    auth_password_min_length: int = 8
+    # bcrypt silently truncates at 72 bytes; we reject longer passwords instead.
+    auth_password_max_bytes: int = 72
 
     # --- LLM ---
     llm_provider: str = "mock"  # "mock" | "openai_compatible"
@@ -74,6 +91,11 @@ class Settings(BaseSettings):
 
     # --- Storage ---
     upload_dir: Path = BACKEND_DIR / "data" / "uploads"
+
+    @property
+    def using_default_auth_secret(self) -> bool:
+        """True when the throwaway development signing key was not overridden."""
+        return self.auth_secret_key == _DEV_AUTH_SECRET
 
     @property
     def using_mock_llm(self) -> bool:
