@@ -51,6 +51,29 @@ def test_scam_type_filter_works_on_sqlite(client):
     assert all(item["id"] != job["investigation_id"] for item in resp.json()["items"])
 
 
+def test_scam_type_filter_postgres_compiles():
+    """The scam-type filter must also compile on PostgreSQL, not just SQLite.
+
+    ``_scam_type_expr`` used to branch on the dialect and call ``.astext`` on
+    the PostgreSQL side.  ``.astext`` exists only on the ``postgresql.JSONB``
+    comparator, so on the plain ``JSON`` column used here it raised
+    ``AttributeError: Neither 'BinaryExpression' object nor 'Comparator'
+    object has an attribute 'astext'`` — and because the offline suite runs on
+    SQLite, nothing caught it until CI reached a real server.  Compiling the
+    expression for the PostgreSQL dialect exercises that branch with no
+    server, and pinning the ``->>`` operator keeps the behaviour honest.
+    """
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    from app.services.investigation_service import _scam_type_expr
+
+    expr = _scam_type_expr("job_scam")
+    pg_sql = str(expr.compile(dialect=postgresql.dialect()))
+    sqlite_sql = str(expr.compile(dialect=sqlite.dialect()))
+    assert "->>" in pg_sql, pg_sql
+    assert "json_extract" in sqlite_sql.lower(), sqlite_sql
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 — ML prediction exposed in API
 # ---------------------------------------------------------------------------

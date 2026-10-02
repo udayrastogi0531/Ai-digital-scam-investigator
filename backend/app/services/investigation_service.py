@@ -46,13 +46,18 @@ logger = logging.getLogger("scaminvestigator.service")
 def _scam_type_expr(value: str):
     """Portable filter on ``reports.scam_type['primary']``.
 
-    PostgreSQL exposes ``.astext`` (``->>``).  SQLAlchemy's SQLite JSON
-    subscript wraps the value in ``JSON_QUOTE`` (``'"job_scam"'``), so it
-    never equals a plain bound string — use ``json_extract`` directly there.
+    SQLAlchemy's generic JSON subscript wraps the value in ``JSON_QUOTE``
+    (``'"job_scam"'``), so it never equals a plain bound string — the text
+    form of the member must be extracted explicitly.
+
+    ``.as_string()`` is that text form and compiles per dialect: ``->>`` on
+    PostgreSQL and ``JSON_EXTRACT`` on SQLite.  Do **not** reach for
+    ``.astext`` here: that accessor only exists on the ``postgresql.JSONB``
+    comparator, so on a plain ``JSON`` column it raises ``AttributeError`` —
+    a crash the SQLite-only test suite never sees (see
+    ``tests/test_regressions.py::test_scam_type_filter_postgres_compiles``).
     """
-    if get_settings().using_sqlite:
-        return func.json_extract(Report.scam_type, "$.primary") == value
-    return Report.scam_type["primary"].astext == value
+    return Report.scam_type["primary"].as_string() == value
 
 
 _INVESTIGATION_LOADS = (
