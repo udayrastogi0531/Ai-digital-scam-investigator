@@ -27,7 +27,7 @@ Every command below is run from `backend/` with the venv interpreter
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest tests/ -q                      # 236 passed, 12 skipped
+.venv/Scripts/python.exe -m pytest tests/ -q                      # 238 passed, 12 skipped
 .venv/Scripts/python.exe scripts/evaluate_detection.py --assert-baseline   # 64 cases, 0 FP, 0 FN, band 40/40
 .venv/Scripts/python.exe scripts/end_to_end_smoke.py               # 12/12 flows
 
@@ -57,12 +57,12 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 
 ## 2. Suite map
 
-248 tests are collected; 236 pass offline and 12 skip (the opt-in live and PostgreSQL suites).
+250 tests are collected; 238 pass offline and 12 skip (the opt-in live and PostgreSQL suites).
 
 | File | Tests | Covers |
 |---|---|---|
 | `test_evaluation_corpus.py` | 74 | Every case in the 64-case calibration corpus through the real API pipeline, plus unit-level signal semantics (protective warnings, OTP vs two-factor, receipt vs payment request, punycode lookalikes, rule suppression) |
-| `test_phase3.py` | 36 | Provider contracts and normalisation, malformed-input handling, graph completion when every provider fails, LLM fallback on malformed/empty/exception output, dataset loader validation, deduplication, split reproducibility, contamination guard |
+| `test_phase3.py` | 36 | Provider contracts and normalisation, malformed-input handling, graph completion when every provider fails, LLM fallback on malformed/empty/exception output, dataset loader validation, deduplication, split reproducibility, contamination guard. The loader/split cases build their input from `scripts/ml_training/generate_dataset.py` into `tmp_path`, so they need **no** generated dataset on disk |
 | `test_regressions.py` | 26 | Previously-fixed defects, including that the LLM cannot invent a category without deterministic evidence |
 | `test_calibration.py` | 14 | Risk-band regression cases for representative scams and their benign hard negatives, with exact inputs inline |
 | `test_extraction.py` | 10 | URL structure analysis, entity extraction, suspicious TLD/keyword handling |
@@ -70,7 +70,7 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 | `test_auth.py` | 21 | Registration and login, bcrypt hashing (plaintext never stored or returned), password policy, duplicate email, identical failures for unknown-email vs wrong-password, `/me`, malformed/foreignly-signed/expired tokens, `token_version` invalidation, logout, and which endpoints require a token |
 | `test_authorization_isolation.py` | 6 | Two real accounts: neither can read, delete or enumerate the other's investigations; a foreign id is byte-identical to a missing one (`404`); history is scoped to the caller; anonymous access is `401` |
 | `test_load.py` | 5 | Deterministic concurrency behaviour: five concurrent text investigations all complete; an image burst beyond `MAX_CONCURRENT_IMAGE_OPS` is refused with `503` + `Retry-After` rather than queued; no slot leak after repeated successes or after failures; the rate limiter still rejects the overflow |
-| `test_upload_security.py` | 14 | Every upload-rejection branch: empty, oversized, non-image bytes behind an image content type, the 64 M-pixel cap (asserting the decode is never reached), Pillow's bomb error *and* bomb warning, a decode-time `MemoryError`, filename sanitisation, no investigation created on rejection, and no file written to disk for a valid upload |
+| `test_upload_security.py` | 16 | Every upload-rejection branch: empty, oversized, non-image bytes behind an image content type, the 64 M-pixel cap (asserting the decode is never reached), Pillow's bomb error *and* bomb warning, a decode-time `MemoryError`, filename sanitisation (POSIX, Windows, mixed separators, and blank/traversal names), no investigation created on rejection, and no file written to disk for a valid upload |
 | `test_image_concurrency.py` | 5 | The bounded image-concurrency gate: the configured limit is respected, an in-flight investigation causes the next image request to get a retryable `503`, capacity is restored once it finishes, and the slot is released after an exception and after a rejected upload |
 | `test_ssrf_guard.py` | 2 | The no-SSRF property, behaviourally: every outbound request during a submission containing internal addresses is captured, and only the configured reputation hosts may appear |
 | `test_rate_limit.py` | 4 | The limiter directly: client key extraction (forwarded header preferred), the limit producing a `429`, the window reopening after a minute, and per-client isolation |
@@ -109,6 +109,7 @@ guarantees that, and it is worth knowing before you debug a surprising pass or f
 | `AUTH_SECRET_KEY` → a fixed test value | Tokens minted in one test verify in another, without depending on a local secret |
 | `LLM_PROVIDER=mock` and **blanked** `LLM_API_KEY`, `GOOGLE_SAFE_BROWSING_API_KEY`, `VIRUSTOTAL_API_KEY` | Environment variables outrank the `.env` file, so providers are pinned to their deterministic mocks even if you have live keys configured |
 | `ML_MODEL_PATH` → the shipped artifact | The ML channel behaves as it does in production |
+| Generated training set **not** required | `test_phase3.py` writes its own synthetic set via `generate_dataset.py` into `tmp_path`, so the suite runs identically on a clean checkout with no `data/datasets/scam_messages.csv` |
 
 The blanking is skipped when `RUN_LIVE_INTEL_TESTS=1` or `RUN_LIVE_LLM_TESTS=1`, so the documented
 opt-in workflow still sees real keys. `scripts/evaluate_detection.py` blanks the same keys for the same

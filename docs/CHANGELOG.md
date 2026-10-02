@@ -9,6 +9,31 @@ optional scope such as `fix(patterns):`). See [CONTRIBUTING.md §10](CONTRIBUTIN
 
 ---
 
+## 2026-10-02 — CI reproducibility fixes (hermetic dataset tests, filename sanitisation)
+
+The first CI run failed on three tests that had passed locally because this machine holds files a
+clean GitHub checkout does not. No detection behaviour changed; the 64-case baseline
+(accuracy / precision / recall / F1 all `1.0`, `0` FP, `0` FN, category 40/40, band 40/40) still holds.
+
+- `fix(test): generate the dataset fixture instead of shipping a generated artifact` — two
+  `test_phase3.py` cases loaded `data/datasets/scam_messages.csv`, which the `.gitignore` deliberately
+  keeps out of the repository (it is produced by `scripts/ml_training/generate_dataset.py`), so a clean
+  checkout raised `DatasetValidationError: dataset not found`. They now build their input with that same
+  generator into `tmp_path`, exercising the real generator → loader → split path with no file on disk.
+  The loader and its honesty rules are untouched, and the real UCI corpus is neither regenerated nor
+  replaced.
+- `fix(security): strip Windows and POSIX separators in sanitize_filename` — the helper reduced paths
+  with `pathlib.Path().name`, which splits only on the *host* OS separator, so `C:\Windows\System32\evil.png`
+  stayed one string on a POSIX runner and the character filter turned it into
+  `C__Windows_System32_evil.png`. Both separator styles are now reduced explicitly, and blank or
+  traversal-token names (`.`, `..`) collapse to the neutral `upload` fallback. Regression coverage was
+  extended to POSIX/Windows/mixed separators and invalid names.
+- `docs: record the CI reproducibility fixes and updated test counts` — README, `docs/TESTING.md`
+  (250 collected / 238 pass / 12 skip, `test_upload_security.py` 16), `docs/EVALUATION.md` (the ML report
+  is a generated, git-ignored artifact) and `backend/data/datasets/README.md`.
+
+---
+
 ## 2026-09-30 — PostgreSQL migrations, authentication, multi-tenancy, CI and load testing
 
 A production-completion pass. Nothing about the detection pipeline changed — the 64-case baseline

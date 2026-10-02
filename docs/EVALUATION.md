@@ -221,8 +221,9 @@ and importer behaviour are documented in [`data/datasets/README.md`](../backend/
 2. deterministic stratified split (`seed=42`): **3,611 train / 516 validation / 1,032 test**;
 3. `StandardScaler` → `LogisticRegression(max_iter=2000, C=0.8, class_weight="balanced")`;
 4. the reported metrics come from the **held-out test split** only;
-5. the report is written to `data/datasets/evaluation_report.json` (committed, so the numbers are
-   auditable without rerunning training).
+5. the report is written to `data/datasets/evaluation_report.json` (a **generated, git-ignored**
+   artifact; the metrics in §4.3 below are the recorded evidence, so they stay auditable without
+   rerunning training).
 
 ### 4.3 Results
 
@@ -307,7 +308,7 @@ No API keys, no network. From `backend/`:
 
 The generated evaluation reports under `backend/data/evaluation/` are **git-ignored** — they are
 artifacts of a run, and regenerating them is expected. The committed evidence is the corpus itself
-(`evaluation_cases.json`), the ML report (`data/datasets/evaluation_report.json`) and the tests.
+(`evaluation_cases.json`), the recorded ML metrics (§4.3), and the tests.
 
 Opt-in live suites exist for real providers and are never part of the default run:
 `RUN_LIVE_INTEL_TESTS=1` (Safe Browsing / VirusTotal), `RUN_LIVE_LLM_TESTS=1` (LLM grounding),

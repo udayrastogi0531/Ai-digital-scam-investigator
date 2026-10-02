@@ -680,7 +680,7 @@ Everything except `GET /api/health`, `POST /api/auth/register`, `POST /api/auth/
 
 | Suite | Command (from `backend/`) | Verified result |
 |---|---|---|
-| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **236 passed**, 12 skipped |
+| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **238 passed**, 12 skipped |
 | Detection calibration | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64 cases · F1 1.0 · 0 FP · 0 FN · band 40/40 · 0 errors |
 | End-to-end smoke | `.venv/Scripts/python.exe scripts/end_to_end_smoke.py` | **12/12** flows |
 | Authentication | `.venv/Scripts/python.exe -m pytest tests/test_auth.py -q` | 21 passed |
@@ -699,7 +699,8 @@ Everything except `GET /api/health`, `POST /api/auth/register`, `POST /api/auth/
 The two live rows are **recorded results from the acceptance run**, not a promise about your
 environment: they need real credentials (or a system Tesseract) and are never part of the default
 suite. The rows above them were re-run for the current revision, except the training row, whose
-committed held-out report was re-verified rather than regenerated.
+held-out report was re-verified rather than regenerated (the report is a generated, git-ignored
+artifact — the recorded metrics in [Evaluation](#evaluation) are the committed evidence).
 
 **The offline suites are hermetic.** `tests/conftest.py` pins every provider to its deterministic
 mock implementation, so a developer's `backend/.env` containing real keys can *never* turn `pytest`
@@ -827,7 +828,7 @@ AI-digital-scam-investigator/
 │   │   └── services/       Investigation orchestration + demo cases
 │   ├── alembic/            Migration environment + versions (initial schema)
 │   ├── data/
-│   │   ├── datasets/       Real UCI SMS corpus + synthetic set + provenance + training report
+│   │   ├── datasets/       Real UCI SMS corpus + provenance (synthetic set & report are generated)
 │   │   └── evaluation/     evaluation_cases.json — the 64-case calibration corpus
 │   ├── scripts/            evaluate_detection.py · end_to_end_smoke.py · load_test.py
 │   │                       postgres_integration.py · check_doc_links.py · ml_training/
