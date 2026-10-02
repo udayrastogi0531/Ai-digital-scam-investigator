@@ -61,6 +61,39 @@ def test_sanitize_filename_strips_path_components():
     assert "/" not in sanitize_filename("../../../")
 
 
+def test_sanitize_filename_handles_mixed_separators():
+    """POSIX and Windows separators are stripped regardless of host OS.
+
+    ``pathlib.Path`` splits only on the *host* separator, so a Windows-style
+    input kept its separators when this helper ran on a POSIX runner (the CI
+    failure that prompted this test) and the character filter turned them into
+    underscores: ``C__Windows_System32_evil.png``.  Both separator styles must
+    reduce to the basename everywhere.
+    """
+    assert sanitize_filename(r"C:\Windows/System32\evil.png") == "evil.png"
+    assert sanitize_filename(r"..\..\etc/passwd") == "passwd"
+    assert sanitize_filename("..\\../etc/passwd") == "passwd"
+    for mixed in ("a/b\\c.png", "a\\b/c.png"):
+        sanitized = sanitize_filename(mixed)
+        assert sanitized == "c.png"
+        assert "/" not in sanitized and "\\" not in sanitized
+
+
+def test_sanitize_filename_collapses_invalid_names():
+    """Blank, traversal-token and non-printable names get a neutral fallback.
+
+    ``"."``/``".."`` and a whitespace-only name are not usable filenames; the
+    filter must not hand them back (nor let them reach a join).
+    """
+    assert sanitize_filename("") == "upload"
+    assert sanitize_filename("   ") == "upload"
+    assert sanitize_filename(".") == "upload"
+    assert sanitize_filename("..") == "upload"
+    # control/null bytes cannot become path characters
+    assert sanitize_filename("null\x00byte.png") == "null_byte.png"
+    assert sanitize_filename("dir\x1f\x1f/") == "upload"
+
+
 def test_sanitize_filename_replaces_suspicious_characters():
     assert sanitize_filename("my shot (1).png") == "my_shot__1_.png"
     assert len(sanitize_filename("x" * 500)) == 120

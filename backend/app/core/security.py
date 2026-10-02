@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import io
 import re
-from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 
@@ -39,9 +38,22 @@ def sanitize_filename(name: str) -> str:
 
     Currently unused by any route — uploads are never persisted — but kept as a
     small, tested guard in case a filename ever needs to be handled.
+
+    Both POSIX (``/``) and Windows (``\\``) separators are reduced explicitly
+    rather than through :class:`pathlib.Path`: ``Path`` splits only on the
+    *host* OS separator, so ``Path(r"C:\\x\\evil.png").name`` is ``"evil.png"``
+    on Windows but the whole string on POSIX.  A filename that crossed an OS
+    boundary (or a body produced on a different platform than the one running
+    this code) would keep its separators and then be rewritten to ``_`` by the
+    character filter — turning an intended basename into a path-shaped string.
+    Normalising both separators keeps the guard identical on every platform.
     """
     name = name or "upload"
-    name = Path(name).name
+    name = name.replace("\\", "/").rsplit("/", 1)[-1]
+    # "." and ".." survive basename extraction but are themselves traversal
+    # tokens, so they map to the same neutral fallback as an empty name.
+    if name in (".", "..") or not name.strip():
+        return "upload"
     name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
     return name[:120] or "upload"
 
