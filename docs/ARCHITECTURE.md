@@ -481,9 +481,10 @@ and becomes a no-op after a migration.
 | `reports` | The generated report payload |
 
 Reads rebuild the API response from stored rows rather than from memory, so a result page renders
-identically after a restart. Filters are written to be portable across SQLite and PostgreSQL
-(`json_extract` vs `->>` / `.astext`); the dialect switch is chosen from `DATABASE_URL`, not from a
-hardcoded assumption. SQLite is single-writer and is the verified local path; PostgreSQL 16 via
+identically after a restart. Filters are written to be portable across SQLite and PostgreSQL: the
+scam-type filter uses SQLAlchemy's generic JSON ``.as_string()``, which compiles to ``->>`` on
+PostgreSQL and ``JSON_EXTRACT`` on SQLite, so one expression serves both engines with no dialect
+branch. SQLite is single-writer and is the verified local path; PostgreSQL 16 via
 `postgresql+asyncpg://` is the deployment path and requires `asyncpg`.
 
 **Ownership.** `investigations.user_id` is the multi-tenancy boundary. List, detail and delete all

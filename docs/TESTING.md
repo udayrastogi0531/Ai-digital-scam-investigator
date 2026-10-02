@@ -27,7 +27,7 @@ Every command below is run from `backend/` with the venv interpreter
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest tests/ -q                      # 238 passed, 12 skipped
+.venv/Scripts/python.exe -m pytest tests/ -q                      # 239 passed, 12 skipped
 .venv/Scripts/python.exe scripts/evaluate_detection.py --assert-baseline   # 64 cases, 0 FP, 0 FN, band 40/40
 .venv/Scripts/python.exe scripts/end_to_end_smoke.py               # 12/12 flows
 
@@ -57,13 +57,13 @@ ESLint and no ESLint config is committed. `typecheck` and `build` are the enforc
 
 ## 2. Suite map
 
-250 tests are collected; 238 pass offline and 12 skip (the opt-in live and PostgreSQL suites).
+251 tests are collected; 239 pass offline and 12 skip (the opt-in live and PostgreSQL suites).
 
 | File | Tests | Covers |
 |---|---|---|
 | `test_evaluation_corpus.py` | 74 | Every case in the 64-case calibration corpus through the real API pipeline, plus unit-level signal semantics (protective warnings, OTP vs two-factor, receipt vs payment request, punycode lookalikes, rule suppression) |
 | `test_phase3.py` | 36 | Provider contracts and normalisation, malformed-input handling, graph completion when every provider fails, LLM fallback on malformed/empty/exception output, dataset loader validation, deduplication, split reproducibility, contamination guard. The loader/split cases build their input from `scripts/ml_training/generate_dataset.py` into `tmp_path`, so they need **no** generated dataset on disk |
-| `test_regressions.py` | 26 | Previously-fixed defects, including that the LLM cannot invent a category without deterministic evidence |
+| `test_regressions.py` | 27 | Previously-fixed defects, including that the LLM cannot invent a category without deterministic evidence, and that the scam-type filter compiles for the PostgreSQL dialect (`->>`) as well as SQLite |
 | `test_calibration.py` | 14 | Risk-band regression cases for representative scams and their benign hard negatives, with exact inputs inline |
 | `test_extraction.py` | 10 | URL structure analysis, entity extraction, suspicious TLD/keyword handling |
 | `test_api_integration.py` | 9 | Health, text/URL/image submissions, history filters, detail and delete roundtrip, empty-submission rejection |

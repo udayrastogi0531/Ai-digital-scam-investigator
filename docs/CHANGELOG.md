@@ -9,6 +9,23 @@ optional scope such as `fix(patterns):`). See [CONTRIBUTING.md §10](CONTRIBUTIN
 
 ---
 
+## 2026-10-02 — CI: PostgreSQL scam-type filter fix
+
+The second CI run got past the SQLite suite but failed the **PostgreSQL integration** step — the
+first run had failed earlier, so this step had never executed before. Root cause: `_scam_type_expr`
+reached for `.astext`, which exists only on the `postgresql.JSONB` comparator, so on the plain `JSON`
+column it raised `AttributeError: Neither 'BinaryExpression' object nor 'Comparator' object has an
+attribute 'astext'`. SQLite took the other branch, so no offline test could see it.
+
+- `fix(db): use a dialect-portable JSON text accessor for the scam-type filter` — one generic
+  `.as_string()` expression now serves both engines (`->>` on PostgreSQL, `JSON_EXTRACT` on SQLite),
+  replacing the `.astext` accessor and the dialect branch.
+- `test(db): compile the scam-type filter for the PostgreSQL dialect` — `test_regressions.py` (27)
+  compiles the expression against the PostgreSQL dialect and pins `->>`, so this branch is covered
+  with no server.
+
+---
+
 ## 2026-10-02 — CI reproducibility fixes (hermetic dataset tests, filename sanitisation)
 
 The first CI run failed on three tests that had passed locally because this machine holds files a

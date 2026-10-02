@@ -165,9 +165,11 @@ subsequent starts are no-ops. Running the app outside the image? Apply the same 
 
 - **Local development:** omit `DATABASE_URL` entirely. SQLite is used at
   `backend/data/app.db` (git-ignored). This is the verified path.
-- **Production:** PostgreSQL 16 via `postgresql+asyncpg://…`. Filters were written to be portable
-  across both engines (`json_extract` on SQLite vs `->>`/`.astext` on PostgreSQL in
-  `backend/app/services/investigation_service.py`).
+- **Production:** PostgreSQL 16 via `postgresql+asyncpg://…`. Filters are portable across both
+  engines: the scam-type filter uses SQLAlchemy's generic JSON `.as_string()`, which compiles to
+  `->>` on PostgreSQL and `JSON_EXTRACT` on SQLite (`backend/app/services/investigation_service.py`).
+  `tests/test_regressions.py` compiles that expression for the PostgreSQL dialect so the branch is
+  covered without a server.
 - Do not commit database files (`*.db` is git-ignored).
 
 ### Initialization and migrations

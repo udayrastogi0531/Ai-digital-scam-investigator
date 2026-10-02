@@ -680,7 +680,7 @@ Everything except `GET /api/health`, `POST /api/auth/register`, `POST /api/auth/
 
 | Suite | Command (from `backend/`) | Verified result |
 |---|---|---|
-| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **238 passed**, 12 skipped |
+| Backend unit + integration | `.venv/Scripts/python.exe -m pytest tests/ -q` | **239 passed**, 12 skipped |
 | Detection calibration | `.venv/Scripts/python.exe scripts/evaluate_detection.py` | 64 cases · F1 1.0 · 0 FP · 0 FN · band 40/40 · 0 errors |
 | End-to-end smoke | `.venv/Scripts/python.exe scripts/end_to_end_smoke.py` | **12/12** flows |
 | Authentication | `.venv/Scripts/python.exe -m pytest tests/test_auth.py -q` | 21 passed |
