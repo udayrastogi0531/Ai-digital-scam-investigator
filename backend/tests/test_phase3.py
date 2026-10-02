@@ -578,8 +578,26 @@ def test_loader_rejects_rows_overlapping_evaluation_ids(tmp_path):
     assert any("contamination guard" in e for e in stats.errors)
 
 
+def _synthetic_dataset(tmp_path, *, per_category: int = 40):
+    """Write a small deterministic synthetic dataset into ``tmp_path``.
+
+    The repository deliberately commits **no** generated training set: the
+    ``.gitignore`` keeps ``data/datasets/*`` out and
+    ``data/datasets/README.md`` documents ``scam_messages.csv`` as produced by
+    ``scripts/ml_training/generate_dataset.py``.  These tests therefore build
+    their input with that same generator, so they exercise the real
+    generator -> loader -> split path on any fresh checkout instead of
+    depending on a file that is not in the repository.  The file is named
+    ``scam_messages.csv`` because ``origin`` is keyed on the dataset name
+    (``app/ml/dataset._origin_for``).
+    """
+    from scripts.ml_training.generate_dataset import generate, write_csv
+
+    return write_csv(generate(n_per_category=per_category, seed=7), tmp_path / "scam_messages.csv")
+
+
 def test_stratified_split_is_reproducible_and_balanced(tmp_path):
-    rows, stats = load_dataset("data/datasets/scam_messages.csv", deduplicate=False)
+    rows, stats = load_dataset(_synthetic_dataset(tmp_path), deduplicate=False)
     train_a, val_a, test_a = stratified_split(rows, seed=7)
     train_b, val_b, test_b = stratified_split(rows, seed=7)
     assert len(train_a) == len(train_b) and len(val_a) == len(val_b) and len(test_a) == len(test_b)
@@ -593,5 +611,6 @@ def test_stratified_split_is_reproducible_and_balanced(tmp_path):
 
 
 def test_loader_origin_flags_synthetic(tmp_path):
-    rows, stats = load_dataset("data/datasets/scam_messages.csv")
+    rows, stats = load_dataset(_synthetic_dataset(tmp_path))
     assert stats.origin == "synthetic"
+    assert rows  # generated rows pass the real validated loader
