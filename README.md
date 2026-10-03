@@ -467,7 +467,7 @@ What was **actually executed** against real providers — not inferred from conf
 | SQLite (local) | **VERIFIED** | Create / retrieve / history / filters / pagination / delete exercised over HTTP; missing and malformed ids return 404 |
 | PostgreSQL | **NOT CONFIGURED LOCALLY** | Not installed in this environment; SQLite is the verified local store. `DATABASE_URL` plus `docker-compose.yml` carry the PostgreSQL path (engine-portable filters are implemented, but that path was not executed here) |
 | Docker | **NOT VERIFIED** | The Docker CLI is not installed in this environment, so `docker compose config/build/up` were not run. The Dockerfiles and compose file are unchanged and untested here |
-| Cloud deployment | **NOT PERFORMED** | No frontend or backend deployment exists; [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) documents the intended paths |
+| Cloud deployment | **PREPARED, NOT PERFORMED** | No frontend or backend deployment exists yet. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) documents the exact path, and a one-click [`render.yaml`](render.yaml) Blueprint provisions the backend + managed PostgreSQL (secrets supplied in the dashboard, never committed) |
 
 ### Historical live acceptance run
 

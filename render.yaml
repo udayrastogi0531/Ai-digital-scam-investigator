@@ -1,0 +1,69 @@
+# Render Blueprint — backend + managed PostgreSQL in one click.
+#
+# Import at https://dashboard.render.com/blueprints ("New Blueprint") and pick
+# this repository.  Render then creates:
+#   * the managed PostgreSQL database below, and
+#   * the FastAPI web service, built from backend/Dockerfile.
+#
+# No secret is stored here.  `generateValue: true` mints a strong random value;
+# `sync: false` makes Render prompt for the value during creation.  The frontend
+# is deployed separately on Vercel — see docs/DEPLOYMENT.md §3.
+#
+# Free-tier caveats (see docs/DEPLOYMENT.md §11): a free web service spins down
+# after ~15 minutes idle, and a free PostgreSQL instance is deleted ~30 days
+# after creation unless upgraded.  Both are fine for a demo, not for real users.
+
+databases:
+  - name: scaminvestigator-db
+    databaseName: scaminv
+    user: scaminv
+    plan: free
+    region: oregon
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: scaminvestigator-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Injected by Render.  The app rewrites the plain `postgresql://` scheme to
+      # `postgresql+asyncpg://` (see backend/app/core/config.py), so the platform
+      # connection string is used verbatim.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: scaminvestigator-db
+          property: connectionString
+
+      # Production signing key for access tokens — strong, random, generated once.
+      - key: AUTH_SECRET_KEY
+        generateValue: true
+
+      # --- Live providers (server-side only; never exposed to the browser) ---
+      # Left as prompts so no key ever lives in the repository.  If LLM_API_KEY
+      # is left empty the app honestly reports demo mode instead of pretending.
+      - key: LLM_PROVIDER
+        value: openai_compatible
+      - key: LLM_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: GOOGLE_SAFE_BROWSING_API_KEY
+        sync: false
+      - key: VIRUSTOTAL_API_KEY
+        sync: false
+
+      # OCR: the image installs the real tesseract binary.
+      - key: OCR_PROVIDER
+        value: tesseract
+
+      # --- Production hardening ---
+      - key: DEBUG
+        value: "false"

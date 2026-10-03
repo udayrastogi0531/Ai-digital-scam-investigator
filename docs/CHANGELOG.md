@@ -9,6 +9,32 @@ optional scope such as `fix(patterns):`). See [CONTRIBUTING.md §10](CONTRIBUTIN
 
 ---
 
+## 2026-10-03 — production readiness for managed PostgreSQL and $PORT hosts
+
+Prepared the repository for a real managed-PostgreSQL deployment and fixed two host-compatibility
+bugs that would have broken the first deploy. No detection logic changed; the 64-case baseline
+(accuracy / precision / recall / F1 all `1.0`) still holds.
+
+- `fix(deploy): make the app ready for managed PostgreSQL and $PORT hosts` — one commit covering:
+  - **`DATABASE_URL` scheme normalisation.** Render/Railway/Heroku inject `postgres://` /
+    `postgresql://`, but SQLAlchemy's async engine needs `postgresql+asyncpg://`; the settings layer
+    now rewrites the scheme (`backend/app/core/config.py`) so a platform connection string is used
+    verbatim.
+  - **`$PORT` binding.** Render defaults `PORT` to `10000`; the image now starts uvicorn on
+    `${PORT:-8000}` (still 8000 under compose/local) via `backend/Dockerfile`.
+  - **`render.yaml` Blueprint.** One-click managed PostgreSQL 16 + the backend web service, with
+    `AUTH_SECRET_KEY` generated and every provider key prompted in the dashboard — no secret in the
+    repo, health check `/api/health`.
+  - **API reference through the frontend origin.** The marketing footer no longer links to
+    `http://localhost:8000/docs`; `/docs`, `/redoc` and `/openapi.json` are proxied to the backend
+    (`frontend/next.config.mjs`).
+  - **Regression coverage** for the URL normalisation (`backend/tests/test_regressions.py`).
+
+Deployment itself is still not performed — the platform login is a manual step, documented in
+[docs/DEPLOYMENT.md](DEPLOYMENT.md).
+
+---
+
 ## 2026-10-02 — CI: PostgreSQL scam-type filter fix
 
 The second CI run got past the SQLite suite but failed the **PostgreSQL integration** step — the

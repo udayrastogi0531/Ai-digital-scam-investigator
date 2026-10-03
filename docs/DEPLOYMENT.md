@@ -32,7 +32,7 @@ actually executed, so a reader can tell a tested path from a documented intentio
 | Live provider keys (Safe Browsing, VirusTotal, Gemini, Tesseract) | **VERIFIED** |
 | PostgreSQL 16 via `DATABASE_URL` | **NOT VERIFIED** |
 | `docker compose config/build/up` | **NOT VERIFIED** |
-| Cloud deployment (Vercel / Railway / Render / Fly.io) | **NOT VERIFIED** — an intended path, not a performed deployment |
+| Cloud deployment (Vercel / Railway / Render / Fly.io) | **PREPARED, NOT VERIFIED** — `render.yaml` and this guide encode the path end-to-end, but nothing has been deployed from this environment |
 | Live LLM on an OpenAI-compatible endpoint | **VERIFIED** for Gemini's endpoint; **NOT VERIFIED** for any other provider |
 | Optional tuning (`LLM_TIMEOUT_SECONDS`, `RISK_WEIGHTS_PATH`, `DEBUG`, `CORS_ORIGINS`) | **OPTIONAL** |
 
@@ -134,14 +134,36 @@ stack (where `DATABASE_URL` must point at the `postgres` service name, not `loca
 
 ---
 
-## 4. Backend — Railway / Render / container host
+## 4. Backend — Render (one-click Blueprint) or any container host
+
+### 4.1 One-click path — Render Blueprint
+
+The repository ships a [`render.yaml`](../render.yaml) Blueprint that provisions **both** managed
+PostgreSQL and the FastAPI service, wired together, with no secret stored in the repo:
+
+1. Sign in at [dashboard.render.com](https://dashboard.render.com) (GitHub login) — **this is a
+   manual step; no deployment tooling can authenticate on your behalf.**
+2. **New → Blueprint**, select this repository, and apply. Render reads `render.yaml` and creates a
+   `scaminvestigator-api` web service plus a `scaminvestigator-db` PostgreSQL 16 database.
+3. When prompted, paste the values for the `sync: false` variables (`LLM_MODEL`, `LLM_API_KEY`,
+   `GOOGLE_SAFE_BROWSING_API_KEY`, `VIRUSTOTAL_API_KEY`). `AUTH_SECRET_KEY` is generated for you, and
+   `DATABASE_URL` is injected from the database automatically.
+4. Wait for the first deploy. The container entrypoint runs `alembic upgrade head` before serving, so
+   a fresh database self-initializes. Confirm `https://<service>.onrender.com/api/health` returns
+   `status: "ok"`.
+
+The Blueprint builds from `backend/Dockerfile` (`dockerContext: ./backend`). Free-tier caveats are in
+[§11](#11-known-free-tier-and-platform-limitations).
+
+### 4.2 Manual path — any container host
 
 Container hosts (Railway, Render, Fly.io, ECS, Kubernetes) work directly with the bundled
 `backend/Dockerfile`:
 
 - Base image `python:3.13-slim`, `tesseract-ocr` installed via `apt` (so live OCR works without a
   host dependency).
-- Exposes port `8000`; starts `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+- Binds to the port the host injects — `$PORT` (Render defaults it to `10000`), falling back to
+  `8000` locally: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}`.
 
 Steps:
 
@@ -149,8 +171,10 @@ Steps:
    `docker build -f backend/Dockerfile backend`).
 2. Set the environment variables from §2.1. At minimum: `DATABASE_URL`, and whichever provider keys
    you have.
-3. Attach a managed PostgreSQL instance and set `DATABASE_URL` from its connection string
-   (`postgresql+asyncpg://…`).
+3. Attach a managed PostgreSQL instance and set `DATABASE_URL` from its connection string. A plain
+   `postgresql://…` / `postgres://…` string is accepted: the app rewrites the scheme to
+   `postgresql+asyncpg://` on load (`backend/app/core/config.py`), so you can paste the platform's
+   connection string verbatim.
 4. Health check path: `/api/health`.
 5. Ensure the platform terminates TLS in front of the service.
 
@@ -165,11 +189,13 @@ subsequent starts are no-ops. Running the app outside the image? Apply the same 
 
 - **Local development:** omit `DATABASE_URL` entirely. SQLite is used at
   `backend/data/app.db` (git-ignored). This is the verified path.
-- **Production:** PostgreSQL 16 via `postgresql+asyncpg://…`. Filters are portable across both
-  engines: the scam-type filter uses SQLAlchemy's generic JSON `.as_string()`, which compiles to
-  `->>` on PostgreSQL and `JSON_EXTRACT` on SQLite (`backend/app/services/investigation_service.py`).
-  `tests/test_regressions.py` compiles that expression for the PostgreSQL dialect so the branch is
-  covered without a server.
+- **Production:** PostgreSQL 16 via `postgresql+asyncpg://…`. A managed provider's plain
+  `postgresql://` / `postgres://` connection string is normalised to the async driver on load
+  (`backend/app/core/config.py`), so Render/Railway/Heroku strings work unmodified. Filters are
+  portable across both engines: the scam-type filter uses SQLAlchemy's generic JSON `.as_string()`,
+  which compiles to `->>` on PostgreSQL and `JSON_EXTRACT` on SQLite
+  (`backend/app/services/investigation_service.py`). `tests/test_regressions.py` compiles that
+  expression for the PostgreSQL dialect so the branch is covered without a server.
 - Do not commit database files (`*.db` is git-ignored).
 
 ### Initialization and migrations
@@ -315,3 +341,24 @@ before exposing this service to any network.
 - SQLite is single-writer: use PostgreSQL for any multi-replica deployment.
 - Run `scripts/load_test.py` to reproduce a behaviour baseline on the target host before making a
   capacity claim — it measures the application, not a production fleet.
+
+---
+
+## 11. Known free-tier and platform limitations
+
+Deploying on the free tiers is honest-but-limited; these are properties of the host, not of the
+application, and none of them is a substitute for a real plan:
+
+- **Free web services sleep.** Render spins a free instance down after ~15 minutes of inactivity;
+  the next request pays a cold start (tens of seconds), and the in-process rate limiter and image
+  concurrency cap reset on each cold start.
+- **Free PostgreSQL is time-boxed.** A free Render database is deleted about 30 days after creation
+  unless it is upgraded to a paid plan. Plan a migration or an upgrade before that window closes.
+- **Provider keys are server-side only.** The frontend proxies `/api/*` to the backend
+  (`frontend/next.config.mjs`), so there is no `NEXT_PUBLIC_*` key and no CORS entry to maintain for
+  the browser. If you ever call the API cross-origin, set an explicit `CORS_ORIGINS` list.
+- **Tesseract** runs inside the backend image, so OCR works on the deployed host with no extra
+  configuration; uploading a screenshot is the only way to exercise it.
+- **Provider absence is reported, not hidden.** With no keys set, `/api/health` shows
+  `is_mock` / `uses_mock` / `demo_mode` truthfully and explanations are deterministic rather than
+  LLM-generated.

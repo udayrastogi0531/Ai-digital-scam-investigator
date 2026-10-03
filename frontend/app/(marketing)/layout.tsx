@@ -72,7 +72,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                   </a>
                 </li>
                 <li>
-                  <a href="http://localhost:8000/docs" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-slate-400 transition hover:text-accent">
+                  <a href="/docs" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-slate-400 transition hover:text-accent">
                     <FileJson className="h-3.5 w-3.5" aria-hidden /> API
                   </a>
                 </li>

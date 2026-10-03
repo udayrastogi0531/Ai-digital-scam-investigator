@@ -24,12 +24,18 @@ RUN chmod +x ./docker-entrypoint.sh \
     && chown -R appuser:appuser /app
 USER appuser
 
+# Bind to the port the host injects (Render/Railway/Heroku set PORT; default
+# 10000 on Render).  Locally/compose there is no PORT, so 8000 is used.
+ENV PORT=8000
 EXPOSE 8000
 
-# Liveness/readiness probe against the real health endpoint.
+# Liveness/readiness probe against the real health endpoint.  Shell form so
+# $PORT expands; on Render this Docker HEALTHCHECK is ignored in favour of the
+# platform health check path, but it stays correct anywhere the image is run.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=5 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status == 200 else 1)"
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${PORT:-8000}/api/health', timeout=3).status == 200 else 1)"
 
-# The entrypoint applies Alembic migrations, then execs the CMD.
+# The entrypoint applies Alembic migrations, then execs the CMD.  Shell form so
+# the host-provided $PORT is honoured without hardcoding it in the image.
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

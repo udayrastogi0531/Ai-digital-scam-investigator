@@ -5,7 +5,7 @@ All secrets live in the environment / .env file.  Nothing is hardcoded.
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -91,6 +91,24 @@ class Settings(BaseSettings):
 
     # --- Storage ---
     upload_dir: Path = BACKEND_DIR / "data" / "uploads"
+
+    @field_validator("database_url")
+    @classmethod
+    def _ensure_async_postgres_driver(cls, value: str) -> str:
+        """Normalise a plain managed-Postgres URL to the async driver.
+
+        Managed providers (Render, Railway, Heroku, Fly) hand out connection
+        strings with the plain ``postgres://`` / ``postgresql://`` schemes, but
+        SQLAlchemy's async engine requires an async driver in the scheme
+        (``postgresql+asyncpg://``).  Rewriting it here means a platform can
+        inject its connection string verbatim instead of every deployment
+        having to rewrite it by hand.  An explicit ``+driver`` prefix (or any
+        non-Postgres URL such as SQLite) is left untouched.
+        """
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+asyncpg://" + value[len(prefix):]
+        return value
 
     @property
     def using_default_auth_secret(self) -> bool:

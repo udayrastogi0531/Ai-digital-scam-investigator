@@ -402,3 +402,36 @@ def test_risk_bands_are_monotonic():
     assert weak.score <= medium.score <= strong.score
     assert weak.level == "LOW"
     assert strong.level in ("HIGH", "CRITICAL")
+
+
+# ---------------------------------------------------------------------------
+# Deployment — managed-Postgres connection strings must reach the async driver
+# ---------------------------------------------------------------------------
+
+def test_plain_postgres_urls_are_normalised_to_the_async_driver():
+    """Render/Railway/Heroku inject ``postgres://`` / ``postgresql://`` URLs.
+
+    SQLAlchemy's async engine rejects a scheme without an async driver
+    (``InvalidRequestError: The asyncio extension requires an async driver``),
+    so the settings layer rewrites the scheme.  This is the difference between
+    a managed-Postgres deployment starting and crash-looping on boot.
+    """
+    from app.core.config import Settings
+
+    for raw in (
+        "postgres://user:pass@dpg-host.oregon-postgres.render.com:5432/scaminv",
+        "postgresql://user:pass@dpg-host.oregon-postgres.render.com:5432/scaminv",
+    ):
+        settings = Settings(database_url=raw)
+        assert settings.database_url == (
+            "postgresql+asyncpg://user:pass@dpg-host.oregon-postgres.render.com:5432/scaminv"
+        )
+        assert not settings.using_sqlite
+
+
+def test_explicit_driver_and_sqlite_urls_are_left_untouched():
+    from app.core.config import Settings
+
+    asyncpg = "postgresql+asyncpg://user:pass@host:5432/scaminv"
+    assert Settings(database_url=asyncpg).database_url == asyncpg
+    assert Settings(database_url="sqlite+aiosqlite:///./x.db").using_sqlite
